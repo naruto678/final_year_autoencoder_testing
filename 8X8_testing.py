@@ -12,7 +12,7 @@ original_dir=test_dir+'/original_cv/'
 tampered_dir=test_dir+'/tempered_cv/'
 results_dir=test_dir+'/final_results 8X8/'
 model_dir=main_dir+'/final_year/'
-threshold=6
+#threshold=6
 
 
 import time
@@ -21,7 +21,7 @@ import os
 from PIL import Image
 from keras.models import load_model
 model=load_model(model_dir+'8_bilinear_v1.h5')
-from skimage.filters import threshold_mean
+from skimage.filters import threshold_minimum,threshold_mean
 
 
 def find_diff_util(org_image,temp_image,debug=False):
@@ -36,12 +36,12 @@ def find_diff_util(org_image,temp_image,debug=False):
     #Image.open((tampered_dir+org_image)).show()
     #print(temp_map.shape)
     diff_map=((abs(org_map-temp_map)).astype(np.uint8))
-    #threshold=threshold_mean(diff_map)
+    threshold=threshold_mean(diff_map)
     bin_map=(diff_map>threshold)
     neg_bin=diff_map<=threshold
     #print(bin_map.shape)
     bin_image=np.zeros((1,512,512,1))
-    bin_image[bin_map]=255
+    bin_image[bin_map]=(np.asarray(Image.open(original_dir+org_image))[None,:,:,1,None])[bin_map]
     bin_image[neg_bin]=0
     bin_image=bin_image.reshape((512,512))
 
@@ -130,3 +130,5 @@ def save_PIL(image_file,image_name,saving_dir):
 
 if __name__=='__main__':
     getRes(original_dir,tampered_dir,debug=False)
+
+    
