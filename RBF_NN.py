@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
+
 from matplotlib import colors
 from sklearn.datasets.samples_generator import make_blobs
 from sklearn.cluster import KMeans
 import numpy as np
-
+import time
 
 
 def make_data(num_samples=100,n_features=10,n_centres=10):
@@ -38,6 +39,7 @@ class NN:
         kmeans  returns the centroid,label,inertia,_
 
         '''
+        self.flag=-1
         self.x_train=x_train
         self.y_train=np.zeros(len(y_train))
         self.y_train[y_train==center_label]=1
@@ -46,40 +48,80 @@ class NN:
         self.x=x_train[y_train==center_label]
         self.centroid_cordinates=kmeans.cluster_centers_[center_label]
         self.sigma=1/len(self.x)*np.sum(np.sqrt(np.sum(np.square((self.x-self.centroid_cordinates)),axis=1)))
+        self.beta=1/(2*(self.sigma**2))
         if self.sigma.shape!=():
             print('The shape came out to be {}'.format(self.sigma.shape))
             raise Exception('You fucked up cunty')
         self.weight=np.random.randn(1)
+        self.phi=lambda x:np.exp(-self.beta*(x**2))
+        self.euclidean=lambda x,y:np.sqrt(np.sum(np.square(x-y),axis=1))
+
     def __repr__(self):
 
         #str1='Center-Cordinates->{}'.format(self.centroid_cordinates)+'\n'+'Sigma->{}'.format(self.sigma) \
         #+'\n'+'Weights->{}'.format(self.weight)
         #return str1
-        attributes=[attrib for attrib in dir(self) if  not attrib.startswith('__')]
-        return str(self.__dict__)
+        attributes=[attrib for attrib in dir(self) if  not (attrib in ['x_train','x','y_train','update','phi','output'] or attrib.startswith('__'))]
+        
+        str1=''
+        for attrib in attributes:
+            str1=str1+attrib+'->'+str(self.__dict__[attrib])+'\n'
+        return str1
 
-    def update(self):
+    def update(self,learning_rate,arr_loss):
         '''
         this is the fuction that will update the weights of the variable
-        it will update sigma and the weight
+        it will update sigma and the weight and also the center co-ordinates
+
         '''
-    def train(self):
+        if self.flag==-1:
+            self.prev_weight=self.weight
+            self.weight=self.weight+learning_rate*np.sum(arr_loss)
+            
+            self.flag=1
+        self.weight=self.weight+learning_rate*np.sum(arr_loss*self.phi(x_train))
+        self.prev_sigma=self.sigma
+        self.sigma=self.sigma+learning_rate*np.sum(np.sum(arr_loss*self.prev_weight*self.phi(self.x_train)*((self.x_train-self.centroid_cordinates)**2)*self.prev_sigma**-3))
+        
+        self.centroid_cordinates=self.centroid_cordinates+learning_rate*np.sum(arr_loss*self.prev_weight*self.phi(self.x_train)*(self.x_train-self.centroid_cordinates)*self.prev_sigma**-2)        
+    
+
+
+    def output(self):
         '''
         we apply gradient descent here
-
+        first compute the loss then find the gradients of the loss with respect to the weights,sigma and the centr
         
         '''
-        pass
 
+        x1=self.weight*self.phi(self.euclidean(self.x_train,self.centroid_cordinates))
+        
+
+        return x1
     
+
+def computeLoss(nn1,nn2,y_train):
+    output=nn1.output()+nn2.output()
+    arr_loss=(y_train-output)
+    loss=arr_loss**2
+    return (arr_loss),1/2*np.sum(loss)
+
 
     
 if __name__=='__main__':
-    x_train,y_train=make_data(100,2,4)
-    kmeans=KMeans(n_clusters=4,random_state=0).fit(x_train)
+    x_train,y_train=make_data(100,2,2)
+    kmeans=KMeans(n_clusters=2,random_state=0).fit(x_train)
     #plot_data(x_train,y_train,kmeans.cluster_centers_)
     nn1=NN(kmeans,x_train,y_train,0)
     nn2=NN(kmeans,x_train,y_train,1)
-    nn3=NN(kmeans,x_train,y_train,2)
-    nn4=NN(kmeans,x_train,y_train,3)
-    print(nn1)
+    learning_rate=0.1
+    arr_loss,loss=computeLoss(nn1,nn2,y_train)
+    print(loss)
+    nn1.update(learning_rate,arr_loss)
+    nn2.update(learning_rate,arr_loss)
+    arr_loss,loss=computeLoss(nn1,nn2)
+    print(loss)
+
+        
+        
+        
