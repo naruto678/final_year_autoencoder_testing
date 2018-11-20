@@ -6,7 +6,6 @@ import numpy as np
 
 
 
-
 def make_data(num_samples=100,n_features=10,n_centres=10):
     return make_blobs(n_samples=num_samples,centers=n_centres,n_features=n_features)
 
@@ -39,6 +38,10 @@ class NN:
         kmeans  returns the centroid,label,inertia,_
 
         '''
+        self.x_train=x_train
+        self.y_train=np.zeros(len(y_train))
+        self.y_train[y_train==center_label]=1
+        self.center_label=center_label
 
         self.x=x_train[y_train==center_label]
         self.centroid_cordinates=kmeans.cluster_centers_[center_label]
@@ -49,9 +52,25 @@ class NN:
         self.weight=np.random.randn(1)
     def __repr__(self):
 
-        str1='Center-Cordinates->{}'.format(self.centroid_cordinates)+'\n'+'Sigma->{}'.format(self.sigma) \
-        +'\n'+'Weights->{}'.format(self.weight)
-        return str1
+        #str1='Center-Cordinates->{}'.format(self.centroid_cordinates)+'\n'+'Sigma->{}'.format(self.sigma) \
+        #+'\n'+'Weights->{}'.format(self.weight)
+        #return str1
+        attributes=[attrib for attrib in dir(self) if  not attrib.startswith('__')]
+        return str(self.__dict__)
+
+    def update(self):
+        '''
+        this is the fuction that will update the weights of the variable
+        it will update sigma and the weight
+        '''
+    def train(self):
+        '''
+        we apply gradient descent here
+
+        
+        '''
+        pass
+
     
 
     
@@ -63,4 +82,4 @@ if __name__=='__main__':
     nn2=NN(kmeans,x_train,y_train,1)
     nn3=NN(kmeans,x_train,y_train,2)
     nn4=NN(kmeans,x_train,y_train,3)
-    
+    print(nn1)
