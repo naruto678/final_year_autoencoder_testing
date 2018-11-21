@@ -47,15 +47,17 @@ class NN:
 
         self.x=x_train[y_train==center_label]
         self.centroid_cordinates=kmeans.cluster_centers_[center_label]
-        self.sigma=1/len(self.x)*np.sum(np.sqrt(np.sum(np.square((self.x-self.centroid_cordinates)),axis=1)))
-        self.beta=1/(2*(self.sigma**2))
+        self.euclidean=lambda x,y:np.sqrt(np.sum(np.square(x-y),axis=1))
+        self.sigma=(1/len(self.x))*np.sum(self.euclidean(self.x,self.centroid_cordinates))
+        self.beta=-1/(2*(self.sigma**2))
         if self.sigma.shape!=():
             print('The shape came out to be {}'.format(self.sigma.shape))
             raise Exception('You fucked up cunty')
         self.weight=np.random.randn(1)
-        self.phi=lambda x:np.exp(-self.beta*(x**2))
-        self.euclidean=lambda x,y:np.sqrt(np.sum(np.square(x-y),axis=1))
-
+        
+        
+        self.phi=lambda x,y:np.exp((self.euclidean(x,y)**2)*self.beta)
+        
     def __repr__(self):
 
         #str1='Center-Cordinates->{}'.format(self.centroid_cordinates)+'\n'+'Sigma->{}'.format(self.sigma) \
@@ -74,17 +76,19 @@ class NN:
         it will update sigma and the weight and also the center co-ordinates
 
         '''
+
+        #print(self.phi(self.x_train,self.centroid_cordinates).shape)
         if self.flag==-1:
             self.prev_weight=self.weight
             self.weight=self.weight+learning_rate*np.sum(arr_loss)
             
             self.flag=1
-        self.weight=self.weight+learning_rate*np.sum(arr_loss*self.phi(x_train))
+        self.weight=self.weight+learning_rate*np.sum(arr_loss*self.phi(self.x_train,self.centroid_cordinates))
         self.prev_sigma=self.sigma
-        self.sigma=self.sigma+learning_rate*np.sum(np.sum(arr_loss*self.prev_weight*self.phi(self.x_train)*((self.x_train-self.centroid_cordinates)**2)*self.prev_sigma**-3))
+        self.sigma=self.sigma+learning_rate*np.sum((arr_loss*self.prev_weight*self.phi(self.x_train,self.centroid_cordinates)*np.sum((self.x_train-self.centroid_cordinates)**2,axis=1)*self.prev_sigma**-3))
         
-        self.centroid_cordinates=self.centroid_cordinates+learning_rate*np.sum(arr_loss*self.prev_weight*self.phi(self.x_train)*(self.x_train-self.centroid_cordinates)*self.prev_sigma**-2)        
-    
+        self.centroid_cordinates=self.centroid_cordinates+learning_rate*np.sum(arr_loss*self.prev_weight*self.phi(self.x_train,self.centroid_cordinates)*np.sum((self.x_train-self.centroid_cordinates),axis=1)*self.prev_sigma**-2)        
+        
 
 
     def output(self):
@@ -94,7 +98,7 @@ class NN:
         
         '''
 
-        x1=self.weight*self.phi(self.euclidean(self.x_train,self.centroid_cordinates))
+        x1=self.weight*self.phi(self.x_train,self.centroid_cordinates)
         
 
         return x1
@@ -102,9 +106,9 @@ class NN:
 
 def computeLoss(nn1,nn2,y_train):
     output=nn1.output()+nn2.output()
-    arr_loss=(y_train-output)
+    arr_loss=abs((y_train-output))
     loss=arr_loss**2
-    return (arr_loss),1/2*np.sum(loss)
+    return (arr_loss),1/2*np.sum((loss)),output
 
 
     
@@ -114,13 +118,23 @@ if __name__=='__main__':
     #plot_data(x_train,y_train,kmeans.cluster_centers_)
     nn1=NN(kmeans,x_train,y_train,0)
     nn2=NN(kmeans,x_train,y_train,1)
-    learning_rate=0.1
-    arr_loss,loss=computeLoss(nn1,nn2,y_train)
-    print(loss)
-    nn1.update(learning_rate,arr_loss)
-    nn2.update(learning_rate,arr_loss)
-    arr_loss,loss=computeLoss(nn1,nn2)
-    print(loss)
+    learning_rate=0.3
+    print(nn1)
+    arr_loss,loss,output=computeLoss(nn1,nn2,y_train)
+    count=0
+    max_iteration=1000
+    prev_loss=loss
+    while(loss>10 and count<max_iteration):
+
+        nn1.update(learning_rate,arr_loss)
+        nn2.update(learning_rate,arr_loss)
+        arr_loss,loss,output=computeLoss(nn1,nn2,y_train)
+
+        count+=1
+        if prev_loss==loss:
+            learning_rate=learning_rate/10
+        print(nn1)
+        print('The loss after {} iterations is {}'.format(count,loss))
 
         
         
