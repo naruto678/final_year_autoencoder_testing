@@ -121,7 +121,7 @@ def find_file_name(image):
     image_name=re.sub(r"(.npy)|(.tiff)|(.jpg)|(.bmp)|(.tif)","",image)     
     return image_name
 
-def make_data_util(image,x_train_dir,y_train_dir,instance='first'):
+def make_data_util(image,x_train_dir,y_train_dir,instance=None):
     #y_images=os.listdir(y_train_dir)
     #x_images=os.listdir(x_train_dir)
     
@@ -129,44 +129,48 @@ def make_data_util(image,x_train_dir,y_train_dir,instance='first'):
     y_train=[]
     
     image_name=find_file_name(image)
-    print(image_name)
-    print(x_train_dir)
-    print(y_train_dir)
+    # print(image_name)
+    # print(x_train_dir)
+    # print(y_train_dir)
     operations_image=glob.glob(x_train_dir+'/*/'+image_name+'/*')
     assert(isinstance(operations_image,list))
     #operations_image=operations_image[:len(operations_image)/2]
     print('{} numberof images have been found'.format(len(operations_image)))
-    if instance=='first':
+    if instance==None:
+        # print('first instance is running')
         for images in operations_image[:len(operations_image)//2]:
             x_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0];
             if  not image.endswith('.npy'):
                 y_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0]
             
             else: y_image=np.load(y_train_dir+'/'+image)
+            x_train.append(x_image)
+            y_train.append(y_image)
     
     else:
-        assert(instance=='second')
+        #assert(instance=='second')
+        #print('second instance is running')
         for images in operations_image[len(operations_image)//2:]:
             x_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0];
             if  not image.endswith('.npy'):
                 y_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0]
             
             else: y_image=np.load(y_train_dir+'/'+image)
-    
+            x_train.append(x_image)
+            y_train.append(y_image)
         
         
         
         #y_image=np.asarray(cv.resize(cv.imread(y_train_dir+'/'+image_name+'.tiff'),(512,512,-1)))
         #print(y_train_dir+'/'+image)
-        x_train.append(x_image)
-        y_train.append(y_image)    
+            
     x_train=np.array(x_train)
     #y_train=np.asarray(cv.resize(cv.imread(y_train_dir+'/'+image_name+'.tiff'),(512,512,-1)))[:,:,1];
     
     y_train=np.array(y_train)
     
-    print(y_train.shape)
-    print(x_train.shape)
+    # print(y_train.shape)
+    # print(x_train.shape)
     
     # for directory in x_images:
     #     final_image_name=x_train_dir+'/'+directory+'/'+_image_name
@@ -196,7 +200,7 @@ def make_data_util(image,x_train_dir,y_train_dir,instance='first'):
 #x_train_1,y_train_1=make_data('2.1.02.tiff.npy')
 
 
-def make_data(image,x_train_dir,y_train_dir,instance='first'):
+def make_data(image,x_train_dir,y_train_dir,instance=None):
     x_train=np.zeros((1,512,512))
     y_train=np.zeros((1,512,512))
     
@@ -210,7 +214,7 @@ def make_data(image,x_train_dir,y_train_dir,instance='first'):
         
  
  
-def preprocess(image,x_train_dir,y_train_dir,instance='first'):
+def preprocess(image,x_train_dir,y_train_dir,instance=None):
      
     
     x_train,y_train=make_data(image,x_train_dir,y_train_dir,instance)
@@ -224,8 +228,8 @@ def preprocess(image,x_train_dir,y_train_dir,instance='first'):
     #y_train=np.concatenate((y_train,y_train_1),axis=1)
     x_train=x_train.reshape((-1,512,512,1))/255
     y_train=y_train.reshape((-1,512,512,1))/255
-    print(x_train.shape)
-    print(y_train.shape)
+    # print(x_train.shape)
+    # print(y_train.shape)
 
     #x_train,x_test,y_train,y_test=train_test_split(x_train,y_train,test_size=0.20,random_state=42)
     return x_train,y_train
@@ -247,16 +251,18 @@ def randomize(x_train,y_train):
 aerials_iterator=iter(os.listdir(y_dir[0]))
 animals_iterator=iter(os.listdir(y_dir[1]))
 scenery_iterator=iter(os.listdir(y_dir[2]))
-
+count1=0
+count=0
+prev_iter=next(animals_iterator)
 while True:
-    number=len(os.listdir(y_dir[1]))*2
-    count1=0
-    count=1
+    number=len(os.listdir(y_dir[1]))
+    #count1=0
+    
     try:
-        if count==1:
+        if count%2==0:
             
             #x1_train,y1_train=preprocess(next(aerials_iterator),x_dir[0],y_dir[0])
-            x2_train,y2_train=preprocess(next(animals_iterator),x_dir[1],y_dir[1])
+            x2_train,y2_train=preprocess(prev_iter,x_dir[1],y_dir[1])
             #x3_train,y3_train=preprocess(next(scenery_iterator),x_dir[2],y_dir[2])
             # x_train=np.concatenate((x2_train),axis=0)
             # y_train=np.concatenate((y2_train),axis=0)
@@ -265,13 +271,17 @@ while True:
             
             #x_train,y_train=randomize(x_train,y_train)
             #print(x_train)
-            count1+=1
-        else :
-            x2_train,y2_train=preprocess(next(animals_iterator),x_dir[1],y_dir[1],instance='second')
-            count1+=1
-        print('Currently doing {}/{} image '.format(count1,number))            
-        final_model.fit(x2_train,y2_train,epochs=5,validation_split=0.3)
+            count=count+1
             
+        else :
+            #print('entered into else')
+            x2_train,y2_train=preprocess(prev_iter,x_dir[1],y_dir[1],instance='second')
+            prev_iter=next(animals_iterator)
+            count=count+1
+            count1+=1    
+        
+        final_model.fit(x2_train,y2_train,epochs=1,validation_split=0.3)
+        print('Finished doing {}/{} image '.format(count1,number))                
         
             
         
