@@ -248,49 +248,57 @@ def randomize(x_train,y_train):
     
 
 
-aerials_iterator=iter(os.listdir(y_dir[0]))
-animals_iterator=iter(os.listdir(y_dir[1]))
-scenery_iterator=iter(os.listdir(y_dir[2]))
-count1=0
-count=0
-prev_iter=next(animals_iterator)
-while True:
-    number=len(os.listdir(y_dir[1]))
-    #count1=0
-    
-    try:
-        if count%2==0:
-            
-            #x1_train,y1_train=preprocess(next(aerials_iterator),x_dir[0],y_dir[0])
-            x2_train,y2_train=preprocess(prev_iter,x_dir[1],y_dir[1])
-            #x3_train,y3_train=preprocess(next(scenery_iterator),x_dir[2],y_dir[2])
-            # x_train=np.concatenate((x2_train),axis=0)
-            # y_train=np.concatenate((y2_train),axis=0)
-            # # x_test=np.concatenate((x1_test,x2_test,x3_test),axis=0)
-            # y_test=np.concatenate((y1_test,y2_test,y3_test),axis=0)
-            
-            #x_train,y_train=randomize(x_train,y_train)
-            #print(x_train)
-            count=count+1
-            
-        else :
-            #print('entered into else')
-            x2_train,y2_train=preprocess(prev_iter,x_dir[1],y_dir[1],instance='second')
-            prev_iter=next(animals_iterator)
-            count=count+1
-            count1+=1    
-        
-        final_model.fit(x2_train,y2_train,epochs=1,validation_split=0.3)
-        print('Finished doing {}/{} image '.format(count1,number))                
-        
-            
-        
-    except StopIteration:
-        print('Thank you cunty for fucking up')
-        final_model.save('8_bilinear_v2_new.h5')
 
-        break
+def train(iterator,x_train_dir,y_train_dir):
+	count1=0
+	count=0
+	prev_iter=next(iterator)
+	while True:
+	    number=len(os.listdir(y_train_dir))
+	    #count1=0
+	    
+	    try:
+	        if count%2==0:
+	            
+	            #x1_train,y1_train=preprocess(next(aerials_iterator),x_dir[0],y_dir[0])
+	            x2_train,y2_train=preprocess(prev_iter,x_train_dir,y_train_dir)
+	            #x3_train,y3_train=preprocess(next(scenery_iterator),x_dir[2],y_dir[2])
+	            # x_train=np.concatenate((x2_train),axis=0)
+	            # y_train=np.concatenate((y2_train),axis=0)
+	            # # x_test=np.concatenate((x1_test,x2_test,x3_test),axis=0)
+	            # y_test=np.concatenate((y1_test,y2_test,y3_test),axis=0)
+	            
+	            #x_train,y_train=randomize(x_train,y_train)
+	            #print(x_train)
+	            count=count+1
+	            
+	        else :
+	            #print('entered into else')
+	            x2_train,y2_train=preprocess(prev_iter,x_train_dir,y_train_dir,instance='second')
+	            prev_iter=next(iterator)
+	            count=count+1
+	            count1+=1    
+	        
+	        final_model.fit(x2_train,y2_train,epochs=5,validation_split=0.01)
+	        print('Finished doing {}/{} image '.format(count1,number))                
+	        
+	            
+	        
+	    except StopIteration:
+	        print('Thank you cunty for fucking up')
+	        #final_model.save('8_bilinear_v2_new.h5')
 
+	        break
+
+if __name__=='__main__':
+
+	for i in range(len(y_dir)):
+	    iterator=iter(os.listdir(y_dir[i]))
+	    print('Currently doing {} folder'.format(y_dir[i][y_dir[i].rfind('/')+1:]))
+	    #print(x_dir[i],y_dir[i])
+	    train(iterator,x_dir[i],y_dir[i])
+	
+	final_model.save('8_bilinear_v3.h5')
 
 
 
