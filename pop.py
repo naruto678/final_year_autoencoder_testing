@@ -8,107 +8,261 @@ import numpy as np
 """
 Created on Sat Aug 11 04:27:03 2018
 
-@author: arnabr
+@author: arnab
 """
 
 
 
 
-
+from time import time
 from keras import Model,Input,layers,optimizers
+from keras.callbacks import TensorBoard,EarlyStopping
+import os
+from random import choice
+from keras import backend as K
+stopping_criteria=EarlyStopping(monitor='acc', min_delta=0, patience=5, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
+batch_size=400
+training_batch_size=50
 
-input_img=Input(shape=(512,512,1))
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(input_img)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#256
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#128
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#64
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#32
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#16
+visualizer_128=TensorBoard(log_dir='./logs/model_128/',histogram_freq=7, batch_size=batch_size, write_graph=True, write_grads=True, write_images=True,update_freq=100)
+visualizer_512=TensorBoard(log_dir='./logs/model_512/',histogram_freq=7, batch_size=batch_size, write_graph=True, write_grads=True, write_images=True,update_freq=100)
+visualizer_128_reg=TensorBoard(log_dir='./logs/model_128_reg/',histogram_freq=7, batch_size=batch_size, write_graph=True, write_grads=True, write_images=True,update_freq=100)
 
-# x=layers.Dense(16*16*16,activation='relu')(x)
-# x=layers.Dropout(0.3)(x)
-# x=layers.Dense(16*16*16,activation='relu')(x)
-# x=layers.Dense(8*8*16,activation='relu')(x)
-# encoder_output=layers.Reshape((8,8,16))(x)
-x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x=layers.BatchNormalization()(x);
-x=layers.MaxPool2D((2,2),padding='same')(x)
-x=layers.Dropout(0.3)(x)
-#8
-# x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-# encoder_output=layers.MaxPool2D((2,2),padding='same')(x)
-
-
-# # now the decoder part
+def binary_regularizer(activity_vector):
+    return 0.001*K.sum(K.abs(activity_vector))
 
 
 
-# #decoder_input=Input(shape=(4,4,16))
-# x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(encoder_output)
-# x1=layers.UpSampling2D((2,2))(x1)
+def make_model_512():
+
+    input_img=Input(shape=(512,512,3))
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(input_img)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #256
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #128
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #64
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #32
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #16
+
+    # x=layers.Dense(16*16*16,activation='relu')(x)
+    # x=layers.Dropout(0.3)(x)
+    # x=layers.Dense(16*16*16,activation='relu')(x)
+    # x=layers.Dense(8*8*16,activation='relu')(x)
+    # encoder_output=layers.Reshape((8,8,16))(x)
+    x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    x=layers.BatchNormalization()(x);
+    x=layers.MaxPool2D((2,2),padding='same')(x)
+    # x=layers.Dropout(0.3)(x)
+    #8
+    # x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    # encoder_output=layers.MaxPool2D((2,2),padding='same')(x)
 
 
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x)
-x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
-x1=layers.Dropout(0.3)(x1)
-#16
-
-
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
-x1=layers.Dropout(0.3)(x1)
-#32
-
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
-x1=layers.Dropout(0.3)(x1)
-#64
-
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
-x1=layers.Dropout(0.3)(x1)
-#128
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
-x1=layers.Dropout(0.3)(x1)
-#256
-
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-x1=layers.Conv2D(1,(3,3),activation='relu',padding='same')(x1)
-x1=layers.Dropout(0.3)(x1)
-#512
-x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
-decoder_output=layers.Conv2D(1,(3,3),activation='relu',padding='same')(x1)
+    # # now the decoder part
 
 
 
+    # #decoder_input=Input(shape=(4,4,16))
+    # x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(encoder_output)
+    # x1=layers.UpSampling2D((2,2))(x1)
 
-#512
-#encoder_model=Model(input_img,encoded_output)
-#decoder_model=Model(decoder_input,decoded_output) 
-final_model=Model(input_img,decoder_output)
-#final_model.compile(optimizer='adadelta',loss='binary_crossentropy',metrics=['acc'])
-final_model.compile(loss='mean_squared_error',optimizer=optimizers.Adagrad(lr=1e-4),metrics=['acc'])
-final_model.summary()
+
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x)
+    x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+    # x1=layers.Dropout(0.3)(x1)
+    #16
+
+
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+    # x1=layers.Dropout(0.3)(x1)
+    #32
+
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+    # x1=layers.Dropout(0.3)(x1)
+    #64
+
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+    # x1=layers.Dropout(0.3)(x1)
+    #128
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+    # x1=layers.Dropout(0.3)(x1)
+    #256
+
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    x1=layers.Conv2D(1,(3,3),activation='relu',padding='same')(x1)
+    # x1=layers.Dropout(0.3)(x1)
+    #512
+    x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+    decoder_output=layers.Conv2D(3,(3,3),activation='relu',padding='same')(x1)
+
+    final_model=Model(input_img,decoder_output)
+     
+    final_model.compile(loss='mean_squared_error',optimizer=optimizers.Adagrad(lr=1e-4),metrics=['acc'])
+    return final_model
+def make_model_128():
+    
+    input_img=Input(shape=(128,128,3))
+    with K.name_scope('Encoder'):
+            
+        with K.name_scope('Convolution_layer_1'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(input_img)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #64
+        with K.name_scope('Convolution_layer_2'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #32
+        with K.name_scope('Convolution_layer_3'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #16
+        with K.name_scope('Convolution_layer_4'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same',name='encoded_output')(x)
+            #x=layers.Dropout(0.3)(x)
+    with K.name_scope('Decoder'):    
+        with K.name_scope('DeConvolutiopn_layer_1'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            
+        
+        #x1=layers.Dropout(0.3)(x1)
+        #16
+        
+        with K.name_scope('DeConvolution_layer_2'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+            #x1=layers.Dropout(0.3)(x1)
+        #3
+        with K.name_scope('DeConvolution_layer_3'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+            #x1=layers.Dropout(0.3)(x1)
+        #32
+        with K.name_scope('DeConvolution_layer_4'):
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+           #64
+        with K.name_scope('DeConvolution_layer_5_with_output'):
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            decoder_output=layers.Conv2D(3,(3,3),activation='relu',padding='same',name='final_output')(x1)
+           #128
+    final_model=Model(input_img,decoder_output)
+    final_model.compile(loss='mean_squared_error',optimizer='adadelta',metrics=['acc'])
+    return final_model
+def make_model_128_with_regularizer():
+    input_img=Input(shape=(128,128,3))
+    with K.name_scope('Encoder'):
+            
+        with K.name_scope('Convolution_layer_1'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(input_img)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #64
+        with K.name_scope('Convolution_layer_2'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #32
+        with K.name_scope('Convolution_layer_3'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same')(x)
+            #x=layers.Dropout(0.3)(x)
+        #16
+        with K.name_scope('Convolution_layer_4'):
+            
+            x=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x)
+            x=layers.BatchNormalization()(x);
+            x=layers.MaxPool2D((2,2),padding='same',name='encoded_output')(x)
+        
+            #x=layers.Dropout(0.3)(x)
+    with K.name_scope('FullyConnectedLayer'):
+        x=layers.Flatten()(x)
+        x=layers.Dense(8*8*16,activity_regularizer=binary_regularizer)(x)
+        x1=layers.Reshape((8,8,16))(x)
+    with K.name_scope('Decoder'):    
+        with K.name_scope('DeConvolution_layer_1'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+            
+            
+        
+        #x1=layers.Dropout(0.3)(x1)
+        #16
+        
+        with K.name_scope('DeConvolution_layer_2'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+            #x1=layers.Dropout(0.3)(x1)
+        #3
+        with K.name_scope('DeConvolution_layer_3'):
+            
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            x1=layers.Conv2D(16,(3,3),activation='relu',padding='same')(x1)
+            #x1=layers.Dropout(0.3)(x1)
+        #32
+        with K.name_scope('DeConvolution_layer_4_with_output'):
+            x1=layers.UpSampling2D((2,2),interpolation='bilinear')(x1)
+            x1=layers.BatchNormalization()(x1);
+            decoder_output=layers.Conv2D(3,(3,3),activation='relu',padding='same',name='final_output')(x1)
+           #128
+    final_model=Model(input_img,decoder_output)
+    final_model.compile(loss='mean_squared_error',optimizer='adadelta',metrics=['acc'])
+    return final_model
+    
+
 
 
 
@@ -116,158 +270,108 @@ from sklearn.model_selection import train_test_split
 import glob
 from PIL import Image
 import os
+import random
 import numpy as np
 import re
 import gc
-x_dir=['../input/aerials/aerials/operations_aerials','../input/operations_animals/operations_animals','../input/operations_scenery/operations_scenery']
-y_dir=['../input/aerials/aerials/modified_aerials','../input/animals_bmp/animals_bmp','../input/scenery_bmp/scenery_bmp']
-#print(os.listdir(x_train_dir));
-#print(os.listdir(y_train_dir));
-#x_train_dir='aerials/operations_aerials'
-#y_train_dir=''
+from functools import partial
+image_x=128
+image_y=128
 
+x_dir=['../input/aerials/aerials/operations_aerials','../input/operations_animals/operations_animals','../input/operations_scenery/operations_scenery']
+y_dir=['../input/aerials/aerials','../input/animals_bmp/animals_bmp','../input/scenery_bmp/scenery_bmp']
+ 
 
 def find_file_name(image):
     image_name=re.sub(r"(.npy)|(.tiff)|(.jpg)|(.bmp)|(.tif)","",image)     
     return image_name
 
-def make_data_util(image,x_train_dir,y_train_dir,instance=None):
-    #y_images=os.listdir(y_train_dir)
-    #x_images=os.listdir(x_train_dir)
-    
-    x_train=[]
-    y_train=[]
-    
-    image_name=find_file_name(image)
-    # print(image_name)
-    # print(x_train_dir)
-    # print(y_train_dir)
-    operations_image=glob.glob(x_train_dir+'/*/'+image_name+'/*')
-    assert(isinstance(operations_image,list))
-    #operations_image=operations_image[:len(operations_image)/2]
-    print('{} numberof images have been found'.format(len(operations_image)))
-    if instance==None:
-        # print('first instance is running')
-        for images in operations_image[:len(operations_image)//2]:
-            x_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0];
-            if  not image.endswith('.npy'):
-                y_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0]
+class Data:
+    def __init__(self,x_dir,y_dir,image_x=image_x,image_y=image_y):
+        self.x_dir=x_dir
+        self.y_dir=y_dir
+        self.image_x=image_x
+        self.image_y=image_y
+        self.x_train=[]
+        self.y_train=[]
+        self.transform=lambda image_name,image_x,image_y:np.asarray(Image.open(image_name).resize((image_x,image_y)))/255
+        
             
-            else: y_image=np.load(y_train_dir+'/'+image)
-            x_train.append(x_image)
-            y_train.append(y_image)
-    
-    else:
-        #assert(instance=='second')
-        #print('second instance is running')
-        for images in operations_image[len(operations_image)//2:]:
-            x_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0];
-            if  not image.endswith('.npy'):
-                y_image=np.asarray((Image.open(images)).resize((512,512)))[:,:,0]
-            
-            else: y_image=np.load(y_train_dir+'/'+image)
-            x_train.append(x_image)
-            y_train.append(y_image)
+        for i in range(1,len(x_dir)):
+            print('Currently doing {} folder '.format(y_dir[i][y_dir[i].rfind('/')+1:]))
+            x_train_dir=x_dir[i]
+            y_train_dir=y_dir[i]
+            for image_name in os.listdir(y_train_dir):
+                image=find_file_name(image_name)
+                operations_image=glob.glob(x_train_dir+'/*/'+image+'/*')
+                print('Found {} number of images'.format(len(operations_image)))
+                _y=[y_train_dir+'/'+image_name]
+                self.x_train+=operations_image        
+                self.y_train+=_y*len(operations_image)
+        assert(len(self.x_train)==len(self.y_train))
+        self.x_train=np.array(self.x_train)
+        self.y_train=np.array(self.y_train)
         
+    def __call__(self,batch_size,image_x,image_y):
+        '''
+        generates the data that will be used for training the model
         
+        '''
+        random_choices=[random.randint(0,len(self.x_train)-1) for i in range(batch_size)]
+        x=self.x_train[random_choices]
+        y=self.y_train[random_choices]
+        x=np.array(list(map(partial(self.transform,image_x=image_x,image_y=image_y),x)))
+        y=np.array(list(map(partial(self.transform,image_x=image_x,image_y=image_y),y)))
         
-         
-            
-    x_train=np.array(x_train)
+        assert(len(x)==len(y))
+        # print(x.shape)
+        # print(y.shape)
+        return x,y
     
-    
-    y_train=np.array(y_train)
-    
-     
-    return x_train,y_train
+    def __repr__(self):
+        return 'x_train contains {} images\ny_train contains {} images\n'.format(len(self.x_train),len(self.y_train))
 
-#x_train,y_train=make_data('2.1.01.tiff.npy',x_train_dir[0],y_train_dir[0])
-#x_train_1,y_train_1=make_data('2.1.02.tiff.npy')
+
+def train(data:Data,final_model,visualizer,image_x,image_y,batch_size:int=batch_size,iterations=100,):
+    count=0
+    while count<iterations:
+        x,y=data(batch_size,image_x,image_y)
+        if final_model==None and Visualizer==None:
+            raise ValueError('Final model was not given as a parameter to the method by the user')
+        final_model.fit(x,y,epochs=1,validation_split=0.2,batch_size=training_batch_size,callbacks=[visualizer])
+        del x,y
+        gc.collect()
+        print('Collecting garbage')
+        count+=1
+        if count%10==0:
+            print('Iteration {}'.format(count+1))
 
 
-def make_data(image,x_train_dir,y_train_dir,instance=None):
-    x_train=np.zeros((1,512,512))
-    y_train=np.zeros((1,512,512))
-    
-    _x1,_y1=make_data_util(image,x_train_dir,y_train_dir,instance)
-        
-    x_train=np.concatenate((x_train,_x1))
-    y_train=np.concatenate((y_train,_y1))
-        
-        
-    return np.array(x_train)[1:,:,:],np.array(y_train)[1:,:,:]
-        
- 
- 
-def preprocess(image,x_train_dir,y_train_dir,instance=None):
-     
-    
-    x_train,y_train=make_data(image,x_train_dir,y_train_dir,instance)
-    x_train=x_train.reshape((-1,512,512,1))/255
-    y_train=y_train.reshape((-1,512,512,1))/255
-    return x_train,y_train
-
-def randomize(x_train,y_train):
-    assert(len(x_train)==len(y_train))
-    instances=np.arange(len(x_train))
-    np.random.shuffle(instances)
-    _x1=[]
-    _y1=[]
-    _x1[np.arange(len(x_train))]=x_train[instances]
-    _y1[np.arange(len(y_train))]=y_train[instances]
-    del x_train,y_train
-    return np.array(_x1),np.array(_y1)
-    
-def train(iterator,x_train_dir,y_train_dir):
-	count1=0
-	count=0
-	prev_iter=next(iterator)
-	while True:
-	    number=len(os.listdir(y_train_dir))
-	    #count1=0
-	    
-	    try:
-	        if count%2==0:
-	            
-	            
-	            x2_train,y2_train=preprocess(prev_iter,x_train_dir,y_train_dir)
-	           
-	            count=count+1
-	            
-	        else :
-	             
-	            x2_train,y2_train=preprocess(prev_iter,x_train_dir,y_train_dir,instance='second')
-	            prev_iter=next(iterator)
-	            count=count+1
-	            count1+=1    
-	        
-	        final_model.fit(x2_train,y2_train,epochs=5,validation_split=0.2)
-	        del x2_train,y2_train
-	        print('collecting garbage')
-	        gc.collect()
-	       
-	        print('Finished doing {}/{} image '.format(count1,number))                
-	        
-	            
-	        
-	    except StopIteration:
-	        print('Thank you cunty for fucking up')
-	        #final_model.save('8_bilinear_v2_new.h5')
-
-	        break
 
 if __name__=='__main__':
+    final_model_128=make_model_128()
+    final_model_512=make_model_512()
+    final_model_128.summary()
+    final_model_512.summary()
+    final_model_128_regularized=make_model_128_with_regularizer()
+    final_model_128_regularized.summary()
+    
+    
+    data=Data(x_dir,y_dir)
+    
+     
+    print('Training the model for an input of 128 X 128')
+    train(data,final_model_128,visualizer_128,128,128,iterations=1)
+    final_model_128.save('./models/8_bilinear_v5_128.h5')
 
-	for i in range(len(y_dir)):
-	    iterator=iter(os.listdir(y_dir[i]))
-	    
-	    print('Currently doing {} folder'.format(y_dir[i][y_dir[i].rfind('/')+1:]))
-	    #print(x_dir[i],y_dir[i])
-	    train(iterator,x_dir[i],y_dir[i])
-	    gc.collect()
-	
-	final_model.save('8_bilinear_v3.h5')
-
-
-
+    # print('Training the model for an input of 512 X 512')
+    
+    
+    # train(data,final_model_512,visualizer_512,512,512,iterations=1,)
+    # final_model_512.save('./models/8_bilinear_v5_512.h5')
+    
+    
+    # print('Now training the regualrized model')
+    # train(data,final_model_128_regularized,visualizer_128_reg,128,128,iterations=1)
+    # final_model_128_regularized.save('./models/8_bilinear_v5_128_reg.h5')
  
