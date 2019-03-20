@@ -1,15 +1,20 @@
+
+
+
 from keras.models import load_model
 import os
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
 import logging
+import grob
+import re
+from pop import find_file_name,Data
+from functools import partial
 
 
 
-
-
-class Test:
+class LocalizationTest:
 	'''
 	The main purpose of this class is to get the original_dir and the test_dir and then save the results in the results_dir
 	This class should contain all the tests and any extra test should be added here in the future and the correspondig results 
@@ -29,26 +34,7 @@ class Test:
 		self.predict=lambda image_x:self.model.predict(self.image(image_x)[None,:,:,:]/255) # model needs 1X128X128X3
 				
 
-	def f1(self,org_image,tamp_image):
-		'''
-		returns the f1_score
-		'''
-		pass
-	def hash_correlation(self,org_image_map,temp_image_map):
-		'''
-		returns the hash_correlation_coefficien
-		'''
-		pass
-	def tpr(self):
-		'''
-		returns the true positive  score for the image_data
-		'''
-		pass
-	def fpr(self):
-		'''
-			returns the false positive score rate
-		'''
-		pass
+	
 
 	def concat_images_util(self,_imga, _imgb,debug=False):
 	    imga=_imga
@@ -131,6 +117,83 @@ class Test:
 		self.save_PIL(Image.fromarray(final_image),original_image_name)
 		return Image.fromarray(final_image)
 
+class ModelTest(Data):
+	def __init__(self,x_dir:list,y_dir:list,image_x:int,image_y:int,model_dir,threshold:int,results_dir:str):
+		'''
+			The class inherits from the data class we made in the training code			
+			x_train contains all the operations_images and y_train contains all the 
+			original_images
+
+			this class will evaluate the model performance on a dataset 
+			The initialier should give a threshold using which the class will evaluate the tpr and the fpr values
+			The tpr and the fpr values should be in a table format shown below for which we will use pandas library
+
+			dataset 	operations 		tpr 	fpr mean_f1_score mean_hash_correlaton
+			indonesia	
+			italy 
+			japan
+
+			this table will be repeated for model with and without regularization and for model having inputs of both 512 and 128
+			
+			a good value of threshold needs to be decided by checking the histogram of hash_correlation array
+			a typical vlaue od 0.98 is selcted as threshold
+
+		'''
+
+		super().__init__(self,x_dir,y_dir,image_x,image_y)
+		self.model_dir=model_dir
+		self.model=load_model(model_dir)
+		self.input_shape=self.model.layers[0].input_shape[1:-1]
+		self.hash_layer_index=[i for i,layer in enumerate(self.model.layers) if layer.output_shape==(None,8,8,16)][-1]
+		self.threshold=threshold
+		self.results_dir=results_dir
+		self.operation_filter=lambda operation_name,image_name:image_name.find(operation_name)!=-1
+		self.image=lambda image_name:np.asarray(Image.open(image_name).resize(self.input_shape))
+		self.predict=lambda image_name:self.model.predict(self.image(image_name)[None,:,:,:]/255) 
+	
+
+	def find_output(self,image):
+		outputs=[layer.output for layer in self.model.layers]
+		functor=K.function([self.model.input]+[K.learning_phase()],outputs)
+		assert(image.ndim==4)
+		layer_outs=functor([image,1.])
+		return layer_outs[self.hash_layer_index]
+
+	def f1(self,org_image,tamp_image,operation):
+
+		'''
+		returns the f1_score
+		'''
+		pass
+
+
+		
+	def hash_correlation(self,org_image_map,temp_image_map,operation):
+		'''
+		returns the mean hash_correlation_coefficient for the operation
+		'''
+		x_test=list(filter(partial(self.operation_filter,operation_name=operation),self.x_train))
+		
+		pass
+
+
+
+
+	def tpr(self,operation):
+		'''
+		returns the true positive  score for the image_data
+		'''
+		pass
+	def fpr(self,operation):
+		'''
+			returns the false positive score rate
+		'''
+		pass	
+	
+	def __call__(self):
+		pass
+
+
 	
 if __name__=='__main__':
 	original_dir='/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv'
@@ -139,7 +202,7 @@ if __name__=='__main__':
 	results_dir='/media/arnab/E0C2EDF9C2EDD3B6/large tampered/final_results 8X8/'
 	logging=logging.getLogger()
 
-	test=Test(original_dir,tampered_dir,results_dir,model_dir)
+	test=LocalizationTest(original_dir,tampered_dir,results_dir,model_dir)
 	for image in tqdm(os.listdir(original_dir)):
 		res_image=test(image,image,v=False)
 		
