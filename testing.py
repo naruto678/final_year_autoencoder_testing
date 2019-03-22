@@ -7,13 +7,14 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 import logging
-import grob
+import glob
 import re
 from pop import find_file_name,Data
 from functools import partial
-
-
-
+import keras.backend as K
+import gc
+import pandas as pd
+import matplotlib.pyplot as plt
 class LocalizationTest:
 	'''
 	The main purpose of this class is to get the original_dir and the test_dir and then save the results in the results_dir
@@ -116,9 +117,8 @@ class LocalizationTest:
 			Image.fromarray(final_image).show()
 		self.save_PIL(Image.fromarray(final_image),original_image_name)
 		return Image.fromarray(final_image)
-
 class ModelTest(Data):
-	def __init__(self,x_dir:list,y_dir:list,image_x:int,image_y:int,model_dir,threshold:int,results_dir:str):
+	def __init__(self,x_dir:list,y_dir:list,model_dir,threshold:int,results_dir:str):
 		'''
 			The class inherits from the data class we made in the training code			
 			x_train contains all the operations_images and y_train contains all the 
@@ -140,72 +140,106 @@ class ModelTest(Data):
 
 		'''
 
-		super().__init__(self,x_dir,y_dir,image_x,image_y)
+		super().__init__(x_dir,y_dir,128,128)
 		self.model_dir=model_dir
 		self.model=load_model(model_dir)
 		self.input_shape=self.model.layers[0].input_shape[1:-1]
+	
 		self.hash_layer_index=[i for i,layer in enumerate(self.model.layers) if layer.output_shape==(None,8,8,16)][-1]
 		self.threshold=threshold
 		self.results_dir=results_dir
 		self.operation_filter=lambda operation_name,image_name:image_name.find(operation_name)!=-1
 		self.image=lambda image_name:np.asarray(Image.open(image_name).resize(self.input_shape))
 		self.predict=lambda image_name:self.model.predict(self.image(image_name)[None,:,:,:]/255) 
-	
+		
 
 	def find_output(self,image):
 		outputs=[layer.output for layer in self.model.layers]
 		functor=K.function([self.model.input]+[K.learning_phase()],outputs)
-		assert(image.ndim==4)
-		layer_outs=functor([image,1.])
-		return layer_outs[self.hash_layer_index]
+		
+		if image.ndim!=4:
+			image=image[None,:,:,:]
+		layer_outs=functor([image,0.])
+		hash_output=layer_outs[self.hash_layer_index]
 
-	def f1(self,org_image,tamp_image,operation):
+		if hash_output.ndim==4:
+			hash_shape=hash_output.shape
+			hash_output=hash_output[0,:,:,:].reshape(-1)
+			
+			return hash_output
 
-		'''
-		returns the f1_score
-		'''
+	
+	def create_histogram(self,input_array:np.array):
 		pass
 
-
 		
-	def hash_correlation(self,org_image_map,temp_image_map,operation):
+	def hash_correlation(self,operation)->list:
 		'''
-		returns the mean hash_correlation_coefficient for the operation
+		returns the  hash_correlation_coefficient  array for the operation
 		'''
-		x_test=list(filter(partial(self.operation_filter,operation_name=operation),self.x_train))
-		
-		pass
+		__x=self.x_train[self.indexes]
+		__y=self.y_train[self.indexes]
+		assert(len(self.__x)==len(self.__y))
+		x_test=(self.image(image_name) for image_name in __x)
+		y_test=(self.image(image_name) for image_name in __y)
+
+		correlation_coefficients=[]
+		for i in tqdm(self.__x):
+			original_hash=self.find_output(next(x_test))
+			tampered_hash=self.find_output(next(y_test))
+			c=np.corrcoef(original_hash,tampered_hash)
+			correlation_coefficients.append(c[0][1])
+
+
+		#print('The correlation coefficient for this operation is {}'.format(correlation_coefficients))
+		return correlation_coefficients
 
 
 
 
-	def tpr(self,operation):
+
+	def tpr(self,correlation_coefficients):
 		'''
 		returns the true positive  score for the image_data
 		'''
-		pass
-	def fpr(self,operation):
+		tpr=0
+		return len(filter(lambda x:x>self.threshold,correlation_coefficients))/len(correlation_coefficients)
+
+
+		
+	def fpr(self,correlation_coefficients):
 		'''
 			returns the false positive score rate
 		'''
-		pass	
+		return 1-tpr(correlation_coefficients)
 	
-	def __call__(self):
-		pass
+	def __call__(self,operation):
+		self.indexes=[i for i,image_name in enumerate(self.x_train) if operation in image_name]
+		print('Found {} number of images corresponding to this {}'.format(len(self.indexes),operation))
+		if len(self.indexes)==0:
+			return None
+		
+		correlation=self.hash_correlation(operation)
+		tpr_value=self.tpr(correlation)
+		fpr_value=self.fpr(correlation)
+		
+		return sum(correlation)/len(correlation),tpr_value,fpr_value
+
 
 
 	
 if __name__=='__main__':
-	original_dir='/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv'
-	tampered_dir='/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv'
-	model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v5.h5'
-	results_dir='/media/arnab/E0C2EDF9C2EDD3B6/large tampered/final_results 8X8/'
+	original_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
+	tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
+	model_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v5.h5']
+	results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/final_results 8X8/']
 	logging=logging.getLogger()
-
-	test=LocalizationTest(original_dir,tampered_dir,results_dir,model_dir)
-	for image in tqdm(os.listdir(original_dir)):
-		res_image=test(image,image,v=False)
+	operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
+	for i in range(len(original_dir)):
 		
+	for operation in operations:
+
+		correlation,tpr_value,fpr_value,f1_score=test(operation)
 		
 
 		
