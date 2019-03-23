@@ -1,3 +1,7 @@
+#!/usr/bin/python
+'''
+@author:arnab
+'''
 from keras.models import load_model
 import os
 from PIL import Image
@@ -217,8 +221,9 @@ class ModelTest(Data):
 		self.threshold=threshold
 		self.results_dir=results_dir
 		self.operation_filter=lambda operation_name,image_name:image_name.find(operation_name)!=-1
-		self.image=lambda image_name:np.asarray(Image.open(image_name).resize(self.input_shape))
-		self.predict=lambda image_name:self.model.predict(self.image(image_name)[None,:,:,:]/255) 
+		self.image=lambda image_name:Image.open(image_name).resize(self.input_shape)
+		self.image_np=lambda image:np.asarray(image)
+		self.predict=lambda image:self.model.predict(image[None,:,:,:]/255) 
 		
 
 	def find_output(self,image):
@@ -253,11 +258,15 @@ class ModelTest(Data):
 
 		correlation_coefficients=[]
 		for i in tqdm(__x):
-			original_hash=self.find_output(next(x_test))
-			tampered_hash=self.find_output(next(y_test))
+			original_image=next(x_test)
+			tampered_image=next(y_test)
+			original_hash=self.find_output(self.image_np(original_image))
+			tampered_hash=self.find_output(self.image_np(tampered_image))
 			c=np.corrcoef(original_hash,tampered_hash)
 			correlation_coefficients.append(c[0][1])
-
+			original_image.close()
+			tampered_image.close()
+			gc.collect()
 
 		#logging.debug('The correlation coefficient for this operation is {}'.format(correlation_coefficients))
 		return correlation_coefficients
@@ -282,7 +291,8 @@ class ModelTest(Data):
 		return 1-self.tpr(correlation_coefficients)
 	
 	def __call__(self,operation)->list:
-		self.indexes=[i for i,image_name in enumerate(self.x_train) if operation in image_name][:2]
+		self.indexes=[i for i,image_name in enumerate(self.x_train) if operation in image_name]
+		self.indexes=self.indexes[:len(self.indexes)//2]
 		logging.debug('Found {} number of images corresponding to this {}'.format(len(self.indexes),operation))
 		if len(self.indexes)==0:
 			return None,None,None
@@ -331,7 +341,7 @@ class Visualize:
 			plt.show()
 			exit()
 		fig.savefig('{}-{}.png'.format(os.path.join(self.results_dir,self.dataset_name),operation),dpi=120)
-
+		plt.close('all')
 	
 	
 	def add(self,index,column,data:list):
@@ -403,11 +413,11 @@ if __name__=='__main__':
 
 	logging.basicConfig(level=logging.DEBUG)
 	logging.disable(logging.CRITICAL)
-	# modelTest(original_dir,tampered_dir,model_dir,results_dir)
+	modelTest(original_dir,tampered_dir,model_dir,results_dir)
 
-	original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-	tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-	results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
-	localTest(original_dir,tampered_dir,model_dir,results_dir)	
+	# original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+	# tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+	# results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
+	# localTest(original_dir,tampered_dir,model_dir,results_dir)	
 
 
