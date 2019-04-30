@@ -165,8 +165,8 @@ class LocalizationTest:
 			result_img=np.zeros(original_map.shape)
 			
 			
-			result_img[diff_map>0.05]=original_image_np[diff_map>0.05] # this is the tampered part
-			result_img[diff_map<=0.1]=0 # this is not the tampered part
+			result_img[diff_map>=0.05]=tampered_image_np[diff_map>=0.05] # this is the tampered part
+			result_img[diff_map<0.1]=0 # this is not the tampered part
 
 			final_image=self.concat_images(original_image_np,tampered_image_np,org_diff_map,result_img)
 			final_image=final_image.astype(np.uint8)
@@ -187,6 +187,24 @@ class LocalizationTest:
 			
 		return correlation_coefficients,f1_scores,self.false_counter
 
+class RotationTest(ModelTest):
+	def __init__(self,x_dir:list,y_dir:list,model_dir,threshold:int,results_dir:str):
+		'''
+		this gives me how the hash codes generated are robust against the roation operations and to what degree are they allowed
+		self.x_train :contains all the names of the operations_images 
+		self.y_train: contains all the images of the real_images
+
+		should contain a dictionary showing the rate of detection for each degree of rotation of an image .The threshold is taken the same
+		above
+
+		'''
+		super().__init__(x_dir,y_dir,model_dir,threshold,results_dir)
+		self.model_dir=model_dir
+		
+		self.image_pairs=[(image,self.y_train[i]) for i,image in enumerate(self.x_train) if 'rotation' in image]
+		self.threshold=threshold
+		self.results_dir=results_dir
+		self.detect_dict={}
 
 
 class ModelTest(Data):
@@ -315,7 +333,7 @@ class Visualize:
 			self.dictionary=dict([((org_dir,b),[]) for b in operations]) 
 			logging.debug(self.dictionary)
 
-	def plot(self,data,operation,debug=False):
+	def plot(self,data,operation,debug=False,instance=None):
 		fig,ax=plt.subplots(1,2)
 		N,bins,patches=ax[0].hist(data,bins=100)
 		fracs=N/N.max()
@@ -329,13 +347,17 @@ class Visualize:
 		ax[0].set_title('Histogram : {}'.format(operation))
 		ax[0].set_xlabel('Data')
 		ax[0].set_ylabel('Frequency')
-		ax[0].yaxis.set_major_formatter(PercentFormatter(xmax=1))
+		# ax[0].yaxis.set_major_formatter(PercentFormatter(xmax=1))
 
 
 		ax[1].plot(data)
 		ax[1].set_title('Graph {}'.format(operation))
 		ax[1].set_xlabel('Data')
-		ax[1].set_ylabel('Frequency')
+		if instance is None:
+
+			ax[1].set_ylabel('hash correlation')
+		else:
+			ax[1].set_ylabel('f1 scores')
 		fig.tight_layout()
 		if debug:
 			plt.show()
@@ -347,7 +369,7 @@ class Visualize:
 	def add(self,index,column,data:list):
 		self.dictionary[(index,column)].append(data)
 		
-	def __call__(self,correlation,tpr_value,fpr_value,operation):
+	def __call__(self,correlation,tpr_value,fpr_value,operation,instance=None):
 
 		'''
 		On being called it needs to do two things 
@@ -356,16 +378,18 @@ class Visualize:
 		'''
 		if self.dictionary is not  None:
 			self.add(self.org_dir,operation,[tpr_value,fpr_value,sum(correlation)/len(correlation)])
-		self.plot(correlation,operation)
+		self.plot(correlation,operation,instance=instance)
+
+
 
 def modelTest(original_dir,tampered_dir,model_dir,results_dir):
 
 	print('Model Testing Phase')
-	operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
+	operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark'][:2]
 	for i in range(len(original_dir)):
 		org_dir,tamp_dir=original_dir[i],tampered_dir[i]
 
-		test=ModelTest([org_dir],[tamp_dir],model_dir,0.70,results_dir)
+		test=ModelTest([org_dir],[tamp_dir],model_dir,0.98,results_dir)
 		visualize=Visualize(results_dir,org_dir[org_dir.rfind('_')+1:],operations)
 		print('Currently doing {} folder'.format(org_dir[org_dir.rfind('/')+1:]))
 		for operation in operations:
@@ -385,11 +409,11 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
 	print('Doing the localization test')
 	for i in range(len(original_dir)):
 		org_dir,tamp_dir=original_dir[i],tampered_dir[i]
-		test=LocalizationTest(org_dir,tamp_dir,results_dir,model_dir,0.7)
+		test=LocalizationTest(org_dir,tamp_dir,results_dir,model_dir,0.98)
 		correlation,f1_scores,false_counter=test()		 
 		visualize=Visualize(results_dir,org_dir)
-		visualize(correlation,0,false_counter,'tampering {} '.format(i))
-		visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]))
+		#visualize(correlation,0,false_counter,'tampering {} '.format(i))
+		visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
 		with open(os.path.join(results_dir,'tampering_text_{}'.format(i)),'a') as f:
 			 
 			f.write('The f1 scores are: '+str(f1_scores))
