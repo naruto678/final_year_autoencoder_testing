@@ -187,24 +187,6 @@ class LocalizationTest:
 			
 		return correlation_coefficients,f1_scores,self.false_counter
 
-class RotationTest(ModelTest):
-	def __init__(self,x_dir:list,y_dir:list,model_dir,threshold:int,results_dir:str):
-		'''
-		this gives me how the hash codes generated are robust against the roation operations and to what degree are they allowed
-		self.x_train :contains all the names of the operations_images 
-		self.y_train: contains all the images of the real_images
-
-		should contain a dictionary showing the rate of detection for each degree of rotation of an image .The threshold is taken the same
-		above
-
-		'''
-		super().__init__(x_dir,y_dir,model_dir,threshold,results_dir)
-		self.model_dir=model_dir
-		
-		self.image_pairs=[(image,self.y_train[i]) for i,image in enumerate(self.x_train) if 'rotation' in image]
-		self.threshold=threshold
-		self.results_dir=results_dir
-		self.detect_dict={}
 
 
 class ModelTest(Data):
@@ -379,7 +361,62 @@ class Visualize:
 		if self.dictionary is not  None:
 			self.add(self.org_dir,operation,[tpr_value,fpr_value,sum(correlation)/len(correlation)])
 		self.plot(correlation,operation,instance=instance)
+class RotationTest(ModelTest):
+	def __init__(self,x_dir:list,y_dir:list,model_dir,threshold:int,results_dir:str):
+		'''
+		this gives me how the hash codes generated are robust against the roation operations and to what degree are they allowed
+		self.x_train :contains all the names of the operations_images 
+		self.y_train: contains all the images of the real_images
 
+		should contain a dictionary showing the rate of detection for each degree of rotation of an image .The threshold is taken the same
+		above
+
+		'''
+		super().__init__(x_dir,y_dir,model_dir,threshold,results_dir)
+		self.model_dir=model_dir
+			
+		self.image_pairs=[(image,self.y_train[i]) for i,image in enumerate(self.x_train) if 'rotation' in image]
+		self.threshold=threshold
+		self.results_dir=results_dir
+		self.total_dict={}
+		self.detect_dict={}
+
+	def hash_correlation(self,tampered_image_name:str,original_image_name:str)->None:
+		'''
+		gets the original iamge and the tampered image name and sends the correlation coefficient 
+		'''
+
+		original_image=self.image(original_image_name)
+		tampered_image=self.image(tampered_image_name)
+		original_hash=self.find_output(self.image_np(original_image))
+		tampered_hash=self.find_output(self.image_np(tampered_image))
+		c=np.corrcoef(original_hash,tampered_hash)[0][1]
+		original_image.close()
+		tampered_image.close()
+		gc.collect()
+		rotation_degree=original_image_name[original_image_name.rfind('ROT_')+1:-4]
+		if rotation_degree not in self.total_dict:
+			self.total_dict[rotation_degree]=1
+		else:
+			self.total_dict[rotation_degree]+=1
+		if c >0.98:
+			if rotation_degree not in self.detect_dict:
+				self.detect_dict[rotation_degree]=1
+			else:
+				self.detect_dict[rotation_degree]+=1
+		else:
+			if rotation_degree not in self.detect_dict:
+				self.detect_dict[rotation_degree]=0
+
+
+
+
+	def __call__(self):
+		for tampered_image,original_image in tqdm(self.image_pairs):
+			self.hash_correlation(tampered_image,original_image)
+		assert(len(self.total_dict)==len(self.detect_dict))
+		self.detect_dict={a:self.detect_dict[a]/b for (a,b) in self.total_dict.items()}
+		return self.detect_dict
 
 
 def modelTest(original_dir,tampered_dir,model_dir,results_dir):
@@ -418,8 +455,10 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
 			 
 			f.write('The f1 scores are: '+str(f1_scores))
 			f.write('The false counter is '+str(false_counter))
-
-
+def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
+	rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
+	d1=rotation()
+	print(d1)
 	
 if __name__=='__main__':
 	'''
@@ -437,8 +476,8 @@ if __name__=='__main__':
 
 	logging.basicConfig(level=logging.DEBUG)
 	logging.disable(logging.CRITICAL)
-	modelTest(original_dir,tampered_dir,model_dir,results_dir)
-
+	# modelTest(original_dir,tampered_dir,model_dir,results_dir)
+	rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
 	# original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
 	# tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
 	# results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
