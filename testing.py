@@ -18,7 +18,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from matplotlib.ticker import PercentFormatter
-
+from random import choice
 class LocalizationTest:
 	'''
 	The main purpose of this class is to get the original_dir and the test_dir and then save the results in the results_dir
@@ -225,7 +225,7 @@ class ModelTest(Data):
 		self.image_np=lambda image:np.asarray(image)
 		self.predict=lambda image:self.model.predict(image[None,:,:,:]/255) 
 		
-
+	
 	def find_output(self,image):
 		outputs=[layer.output for layer in self.model.layers]
 		functor=K.function([self.model.input]+[K.learning_phase()],outputs)
@@ -245,7 +245,7 @@ class ModelTest(Data):
 	def create_histogram(self,input_array:np.array):
 		pass
 
-		
+	
 	def hash_correlation(self,operation)->list:
 		'''
 		returns the  hash_correlation_coefficient  array for the operation
@@ -417,8 +417,8 @@ class RotationTest(ModelTest):
 			self.hash_correlation(tampered_image,original_image)
 		assert(len(self.total_dict)==len(self.detect_dict))
 		self.detect_dict={a:self.detect_dict[a]/b for (a,b) in self.total_dict.items()}
-		print(self.detect_dict)
-		print(self.total_dict)
+		
+		
 		x=sorted(self.detect_dict.keys())
 		y=[self.detect_dict[i] for i in x]
 		plt.bar(x,y)
@@ -426,6 +426,57 @@ class RotationTest(ModelTest):
 		plt.ylabel('true positive rate')
 		plt.title('tpr vs degree')
 		plt.savefig('tpr_vs_degree.png')
+class DiscernibiltyTest:
+	def __init__(self,x_dir:str,model_dir:str,threshold:int):
+		self.x_dir=x_dir
+		self.model_dir=model_dir
+		self.model=load_model(model_dir)
+		self.input_shape=self.model.layers[0].input_shape[1:-1]
+		self.load_image=lambda image_name:Image.open(image_name).resize(self.input_shape)
+		self.image_np=lambda image:np.asarray(image)
+		self.tpr_counter=0
+		self.threshold=threshold
+		self.x_train=[os.path.join(self.x_dir,image_name) for image_name in os.listdir(x_dir)]
+		self.hash_layer_index=[i for i,layer in enumerate(self.model.layers) if layer.output_shape==(None,8,8,16)][-1]
+		assert(len(self.x_train)>0)
+		self.mean_hash_correlation=0
+		self.std_hash_correlation=0
+
+	def find_output(self,image):
+		outputs=[layer.output for layer in self.model.layers]
+		functor=K.function([self.model.input]+[K.learning_phase()],outputs)
+		
+		if image.ndim!=4:
+			image=image[None,:,:,:]
+		layer_outs=functor([image,0.])
+		hash_output=layer_outs[self.hash_layer_index]
+
+		if hash_output.ndim==4:
+			hash_shape=hash_output.shape
+			hash_output=hash_output[0,:,:,:].reshape(-1)
+			
+			return hash_output
+
+	def __call__(self,n_samples=10):
+		'''
+		n_samples is the number of samples for which the discerniblity test will be performed
+		'''
+		l1=np.zeros(n_samples)
+
+		for i in tqdm(range(n_samples)):
+			first_image_name=choice(self.x_train)
+			second_image_name=choice(self.x_train)
+			while  first_image_name==second_image_name:
+				second_image_name=choice(self.x_train)
+			first_hash=self.find_output(self.image_np(self.load_image(first_image_name))/255)
+			second_hash=self.find_output(self.image_np(self.load_image(second_image_name))/255)
+			corr=np.corrcoef(first_hash,second_hash)[0][1]
+			if corr<self.threshold:
+				self.tpr_counter+=1
+			l1[i]=corr
+			gc.collect()
+		return l1.mean(),l1.std(),self.tpr_counter/n_samples
+
 
 
 def modelTest(original_dir,tampered_dir,model_dir,results_dir):
@@ -465,9 +516,19 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
 			f.write('The f1 scores are: '+str(f1_scores))
 			f.write('The false counter is '+str(false_counter))
 def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
+	print('Currently doing rotation test')
 	rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
 	d1=rotation()
-	print(d1)
+	with open(os.path.join(results_dir,'rotation.txt'),'a') as fp:
+		fp.write(str(d1))
+
+def discernibilityTest(x_dir,model_dir,threshold,results_dir):
+	print('currently doing discernibilty test')
+	test=DiscernibiltyTest(x_dir,model_dir,threshold)
+	mean,std,tpr_counter=test(10)
+	with open(os.path.join(results_dir,'discrenibilty.txt'),'a') as fp:
+		fp.write('Mean {} Std {} Tpr {}'.format(mean,std,tpr_counter))
+
 	
 if __name__=='__main__':
 	'''
@@ -477,7 +538,7 @@ if __name__=='__main__':
 	tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
 	model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v5.h5'
 	results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
-	
+	different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
 
 
 
@@ -485,8 +546,12 @@ if __name__=='__main__':
 
 	logging.basicConfig(level=logging.DEBUG)
 	logging.disable(logging.CRITICAL)
+	discernibilityTest(different_dir,model_dir,0.98)
 	# modelTest(original_dir,tampered_dir,model_dir,results_dir)
-	rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+	#rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+	
+
+
 	# original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
 	# tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
 	# results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
