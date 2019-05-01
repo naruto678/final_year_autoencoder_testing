@@ -394,7 +394,8 @@ class RotationTest(ModelTest):
 		original_image.close()
 		tampered_image.close()
 		gc.collect()
-		rotation_degree=original_image_name[original_image_name.rfind('ROT_')+1:-4]
+		rotation_degree=tampered_image_name[tampered_image_name.find('ROT_')+4:-4]
+		print(rotation_degree)
 		if rotation_degree not in self.total_dict:
 			self.total_dict[rotation_degree]=1
 		else:
