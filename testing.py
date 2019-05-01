@@ -395,7 +395,7 @@ class RotationTest(ModelTest):
 		tampered_image.close()
 		gc.collect()
 		rotation_degree=tampered_image_name[tampered_image_name.find('ROT_')+4:-4]
-		print(rotation_degree)
+		
 		if rotation_degree not in self.total_dict:
 			self.total_dict[rotation_degree]=1
 		else:
@@ -413,17 +413,25 @@ class RotationTest(ModelTest):
 
 
 	def __call__(self):
-		for tampered_image,original_image in tqdm(self.image_pairs):
+		for tampered_image,original_image in tqdm(self.image_pairs)[:100]:
 			self.hash_correlation(tampered_image,original_image)
 		assert(len(self.total_dict)==len(self.detect_dict))
 		self.detect_dict={a:self.detect_dict[a]/b for (a,b) in self.total_dict.items()}
-		return self.detect_dict
+		print(self.detect_dict)
+		print(self.total_dict)
+		x=sorted(self.detect_dict.keys())
+		y=[self.detect_dict[i] for i in x]
+		plt.bar(x,y)
+		plt.xlabel('degree of rotation')
+		plt.ylabel('true positive rate')
+		plt.title('tpr vs degree')
+		plt.savefig('tpr_vs_degree.png')
 
 
 def modelTest(original_dir,tampered_dir,model_dir,results_dir):
 
 	print('Model Testing Phase')
-	operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark'][:2]
+	operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
 	for i in range(len(original_dir)):
 		org_dir,tamp_dir=original_dir[i],tampered_dir[i]
 
