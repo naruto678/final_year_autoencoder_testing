@@ -461,24 +461,24 @@ class OperationData(Data):
         self.y_train=self.y_train[self.indexes]
 
 class CompressionData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='compression'):
         super().__init__(operation=operation)
         
 class ContrastData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='contrast'):
         super().__init__(operation=operation)
         
 class GammaData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='gamma'):
         super().__init__(operation=operation)
         
 
 class GaussianData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='gaussian'):
         super().__init__(operation=operation)
         
 class BrightnessData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='brghtness'):
         super().__init__(operation=operation)
         
 class RotationData(OperationData):
@@ -486,19 +486,19 @@ class RotationData(OperationData):
         super().__init__(operation=operation)
     
 class WatermarkData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='watermark'):
         super().__init__(operation=operation)
         
 class SaltAndPepperData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='salt and pepper'):
         super().__init__(operation=operation)
         
 class ScalingData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='scaling'):
         super().__init__(operation=operation)
         
 class SpeckleData(OperationData):
-    def __init__(self,operation='RST'):
+    def __init__(self,operation='speckle'):
         super().__init__(operation=operation)
         
 
