@@ -379,7 +379,7 @@ class RotationTest(ModelTest):
         self.image_pairs=[(image,self.y_train[i]) for i,image in enumerate(self.x_train) if 'rotation' in image]
         self.threshold=threshold
         self.results_dir=results_dir
-        self.angles_list=[-1,-10,-15,-2,-30,-45,-5,-90,1,10,15,2,30,45,5,90]
+        self.angles_list=[-42,-40,-35,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30,35,40,42]
         self.total_dict={i:0 for i in self.angles_list}
         self.detect_dict={i:0 for i in self.angles_list}
 
