@@ -225,7 +225,7 @@ class ModelTest(Data):
         self.image=lambda image_name:Image.open(image_name).resize(self.input_shape)
         self.image_np=lambda image:np.asarray(image)
         self.predict=lambda image:self.model.predict(image[None,:,:,:]/255) 
-        
+                
     
     def find_output(self,image):
         outputs=[layer.output for layer in self.model.layers]
@@ -259,8 +259,13 @@ class ModelTest(Data):
 
         correlation_coefficients=[]
         for i in tqdm(__x):
-            original_image=next(x_test)
+            _original_image=next(x_test)
             tampered_image=next(y_test)
+            original_image=self.detect_RST(_original_image)
+            if original_image is None:
+                original_image=_original_image
+            else:
+                _original_image.close()
             original_hash=self.find_output(self.image_np(original_image))
             tampered_hash=self.find_output(self.image_np(tampered_image))
             c=np.corrcoef(original_hash,tampered_hash)
@@ -268,9 +273,79 @@ class ModelTest(Data):
             original_image.close()
             tampered_image.close()
             gc.collect()
-
+        assert(correlation_coefficients is not None)
         #logging.debug('The correlation coefficient for this operation is {}'.format(correlation_coefficients))
         return correlation_coefficients
+
+    def detect_RST(self,img):
+        '''
+        This takes in a PIL image and detects rotation on it and returns the rotated and rescaled image if possible else returns None
+        '''
+         
+        
+        img=img.resize((128,128))
+        img_array=np.asarray(img)
+        non_points=np.argwhere(img_array>0)
+        x,y=non_points[:,0],non_points[:,1]
+        s1=(max(x),max(y[x==min(x)]))
+        s2=(min(x),min(y[x==max(x)]))
+        s3=(min(x[y==max(y)]),min(y))
+        s4=(min(x[y==min(y)]),max(y))
+        l1=[s1,s2,s3,s4]
+        if s2==s3 or s1==s2 or s1==s4 or s2==s4 or s3==s4 or s1==s3:
+            logging.debug('The image is not rotated')
+            return None                                                                     
+        def compute_slope(p1,p2):
+            return math.degrees(math.atan(abs((p1[1]-p2[1])/(p1[0]-p2[0]))))
+                                                                    
+        def euqlidean(p1,p2):                                       
+            return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)                                                             
+        three_point=[i for i in l1 if i[1]<127]
+        for i in three_point:
+            if i[1]==0:
+                second_point=i
+            elif i[0]==127:
+                third_point=i
+            elif i[0]==0:
+                first_point=i
+
+        for i in l1:
+            if i not in three_point:
+                fourth_point=i
+                break
+        try:
+
+            
+            
+            if second_point[0]>63:
+                first_slope=compute_slope(first_point,second_point)
+                second_slope=compute_slope(fourth_point,third_point)
+                if abs(first_slope-second_slope)<3:
+                    logging.debug('the image is rotated clckwise')
+                    rotation_degree=min(first_slope,second_slope)
+                    img=img.rotate(-rotation_degree)
+                    img=img.crop(img.getbbox()).resize((128,128))
+                
+                    return img
+                else:
+                    return None    
+            elif second_point[0]<63:
+                first_slope=compute_slope(first_point,second_point)
+                second_slope=compute_slope(fourth_point,third_point)
+                if abs(first_slope-second_slope)<3:
+                    logging.debug('the image is counterclockwise')
+                    rotation_degree=90-max(first_slope,second_slope)
+                    img=img.rotate(rotation_degree)
+                    img=img.crop(img.getbbox()).resize((128,128))
+                    
+                    return img
+                else:
+                    return None
+
+            else:
+                return None
+        except:
+            return None
 
 
 
@@ -291,10 +366,15 @@ class ModelTest(Data):
         '''
         return 1-self.tpr(correlation_coefficients)
     
-    def __call__(self,operation)->list:
+    def __call__(self,operation,n_samples=None)->list:
+        
         self.indexes=[i for i,image_name in enumerate(self.x_train) if operation in image_name]
-        self.indexes=self.indexes[:len(self.indexes)//2]
-        logging.debug('Found {} number of images corresponding to this {}'.format(len(self.indexes),operation))
+        if n_samples is None:
+            self.indexes=self.indexes[:len(self.indexes)//2]
+        else:
+            self.indexes=self.indexes[:n_samples]
+
+        logging.debug('Found {} number of images corresponding to this {} in model test'.format(len(self.indexes),operation))
         if len(self.indexes)==0:
             return None,None,None
         
@@ -533,40 +613,52 @@ class DiscernibiltyTest:
             second_image_name=choice(self.x_train)
             while  first_image_name==second_image_name:
                 second_image_name=choice(self.x_train)
-            first_hash=self.find_output(self.image_np(self.load_image(first_image_name))/255)
-            second_hash=self.find_output(self.image_np(self.load_image(second_image_name))/255)
+            first_image=self.load_image(first_image_name)
+            second_image=self.load_image(second_image_name)
+            first_image_np=self.image_np(first_image)
+            second_image_np=self.image_np(second_image)
+            logging.debug(first_image_np.shape)
+            logging.debug(second_image_np.shape)
+            first_hash=self.find_output(first_image_np/255)
+            second_hash=self.find_output(second_image_np/255)
             corr=np.corrcoef(first_hash,second_hash)[0][1]
-            logggin.debug('correlation coefficient is {}'.format(corr))
+            logging.debug('correlation coefficient is {}'.format(corr))
             if corr<self.threshold:
                 self.tpr_counter+=1
             l1[i]=corr
             gc.collect()
-        return l1.mean(),l1.std(),self.tpr_counter/n_samples
+        
+        return l1,self.tpr_counter/n_samples
 
 
 
-def modelTest(original_dir,tampered_dir,model_dir,results_dir):
-
+def modelTest1(original_dir,tampered_dir,model_dir,results_dir):
+    '''
+    this is for generating tpr and fpr rates for different operations in diffrent datasets
+    '''
     print('Model Testing Phase')
     operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
-    for i in range(len(original_dir)):
+    for i in range(2,len(original_dir)):
         org_dir,tamp_dir=original_dir[i],tampered_dir[i]
-
+        logging.debug(org_dir)
+        logging.debug(tamp_dir)
         test=ModelTest([org_dir],[tamp_dir],model_dir,0.98,results_dir)
         visualize=Visualize(results_dir,org_dir[org_dir.rfind('_')+1:],operations)
-        print('Currently doing {} folder'.format(org_dir[org_dir.rfind('/')+1:]))
+        print('Currently doing {} folder for model test'.format(org_dir[org_dir.rfind('/')+1:]))
         for operation in operations:
+            if 'rotation' in operation:
 
-            correlation,tpr_value,fpr_value=test(operation)
-            if correlation is None:
-                continue
-            print('Now plotting the results and saving them')
-            visualize(correlation,tpr_value,fpr_value,operation)
+                print('Operation {}'.format(operation))
+                correlation,tpr_value,fpr_value=test(operation)
+                if correlation is None:
+                    continue
+                print('Now plotting the results and saving them')
+                visualize(correlation,tpr_value,fpr_value,operation)
 
-        with open(os.path.join(results_dir,org_dir[org_dir.rfind('_')+1:]),'a') as f:
-            for (a,b),c in visualize.dictionary.items():
-                f.write('{} {} {}'.format(a,b,c))
-        print('Saved the results in the file')
+                with open(os.path.join(results_dir,org_dir[org_dir.rfind('_')+1:]),'a') as f:
+                    for (a,b),c in visualize.dictionary.items():
+                        f.write('{} {} {}'.format(a,b,c))
+                    print('Saved the results in the file')
 def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
     l1={0:'large tampered',1:'medium tampered',2:"small tampered"}
     print('Doing the localization test')
@@ -588,12 +680,46 @@ def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
     with open(os.path.join(results_dir,'rotation.txt'),'a') as fp:
         fp.write(str(d1))
 
-def discernibilityTest(x_dir,model_dir,threshold,results_dir):
+def discernibilityTest(x_dir,model_dir,threshold,results_dir,write=False,n_samples=10):
     print('currently doing discernibilty test')
     test=DiscernibiltyTest(x_dir,model_dir,threshold)
-    mean,std,tpr_counter=test(10)
-    with open(os.path.join(results_dir,'discrenibilty.txt'),'a') as fp:
-        fp.write('Mean {} Std {} Tpr {}'.format(mean,std,tpr_counter))
+    correlation_coefficients,tpr_counter=test(n_samples)
+    if write:
+        with open(os.path.join(results_dir,'discrenibilty.txt'),'a') as fp:
+            fp.write('Mean {} Std {} Tpr {}'.format(correlation_coefficients.mean(),correlation_coefficients.std(),tpr_counter))
+
+    logging.debug(correlation_coefficients)
+    return correlation_coefficients,tpr_counter
+
+def modelTest2(original_dir:list,tampered_dir:list,model_dir:list,results_dir:list,different_dir=None,threshold=0.98,ns=10,nd=10):
+    '''
+    just find the hash correlation for images undergoing content preserving operations and images having totally different content
+    here we are doing this only for aerials dataset as bechmarks are only available for this one
+    the different_dir wll conttain the path of all the different images whose combinations we are to take
+
+    and remember always thakuria keyword arguments always come after positional arguments you stupid fuck
+    '''
+    operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
+    test=ModelTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
+    same_corrleation_coefficients=[]
+    for operation in operations:
+        print('Operaton {}'.format(operation))
+        correlation_coefficients,tpr_value,fpr_value=test(operation,ns)
+        if correlation_coefficients is not None:
+        	same_corrleation_coefficients+=correlation_coefficients
+    del test
+    gc.collect()
+
+    different_correlation_coefficients,fpr_rate=discernibilityTest(different_dir,model_dir,threshold,results_dir,n_samples=nd)
+    
+    same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
+    # bins1,_=np.histogram(same_corrleation_coefficients,bins=30,density=True)
+    # bins2,_=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=10,density=True)
+    plt.hist(same_corrleation_coefficients)
+    plt.hist(different_correlation_coefficients)
+    plt.legend()
+    plt.show()
+
 
     
 if __name__=='__main__':
@@ -612,15 +738,18 @@ if __name__=='__main__':
 
     logging.basicConfig(level=logging.DEBUG)
     logging.disable(logging.DEBUG)
-    # discernibilityTest(different_dir,model_dir,0.98,results_dir)
-    #modelTest(original_dir,tampered_dir,model_dir,results_dir)
-    rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
-    
+    #discernibilityTest(different_dir,model_dir,0.98,results_dir)
+    #modelTest1(original_dir,tampered_dir,model_dir,results_dir)
+    #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+    modelTest2(original_dir,tampered_dir,model_dir,results_dir,different_dir=different_dir,threshold=0.98)
 
 
     # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
     # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
     # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
     # localTest(original_dir,tampered_dir,model_dir,results_dir)    
+
+    
+ 
 
 
