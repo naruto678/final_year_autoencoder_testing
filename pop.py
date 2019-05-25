@@ -414,12 +414,13 @@ class Data:
         self.transform=lambda image_name,image_x,image_y:np.asarray(Image.open(image_name).resize((image_x,image_y)))/255
         
             
-        for i in range(1,len(x_dir)):
+        for i in range(len(x_dir)):
             print('Currently doing {} folder '.format(y_dir[i][y_dir[i].rfind('/')+1:]))
             x_train_dir=x_dir[i]
             y_train_dir=y_dir[i]
             for image_name in os.listdir(y_train_dir):
                 image=find_file_name(image_name)
+                logging.debug(image,image_name)
                 operations_image=glob.glob(x_train_dir+'/*/'+image+'/*')
                 logging.debug('Found {} number of images in {}'.format(len(operations_image),image_name))
                 _y=[y_train_dir+'/'+image_name]
@@ -525,7 +526,7 @@ def train(data:Data,final_model=None,visualizer=None,image_x=image_x,image_y=ima
 
 if __name__=='__main__':
     logging.basicConfig(level=logging.DEBUG)
-    logging.disable(logging.DEBUG)
+    #logging.disable(logging.DEBUG)
     final_model_128=make_model_128()
     # final_model_512=make_model_512()
     final_model_128.summary()
