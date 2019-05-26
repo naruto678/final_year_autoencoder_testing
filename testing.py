@@ -366,21 +366,29 @@ class ModelTest(Data):
         '''
         return 1-self.tpr(correlation_coefficients)
     
-    def __call__(self,operation,n_samples=None)->list:
+    def __call__(self,operation,n_samples=None,threshold=None,write=False)->list:
         
         self.indexes=[i for i,image_name in enumerate(self.x_train) if operation in image_name]
         if n_samples is None:
-            self.indexes=self.indexes[:len(self.indexes)//2]
+            self.indexes=self.indexes
         else:
             self.indexes=self.indexes[:n_samples]
 
         logging.debug('Found {} number of images corresponding to this {} in model test'.format(len(self.indexes),operation))
         if len(self.indexes)==0:
             return None,None,None
-        
+        if threshold is not None:
+            self.threshold=threshold
+
         correlation=self.hash_correlation(operation)
+        if write:
+            with open(os.path.join(results_dir,'same_correlation'),'a') as fp:
+                for values in np.array(correlation).flatten():
+                    if values is not None:
+                        fp.write(str(values)+'\n')
+            logging.debug('savinf the reslts to a file')
         tpr_value=self.tpr(correlation)
-        fpr_value=self.fpr(correlation)
+        fpr_value=1-tpr_value
         
         return correlation,tpr_value,fpr_value
 class Visualize:
@@ -572,15 +580,16 @@ class RotationTest(ModelTest):
         plt.savefig('tpr_vs_degree.png')
         print(str(self.detect_dict))
 class DiscernibiltyTest:
-    def __init__(self,x_dir:str,model_dir:str,threshold:int):
+    def __init__(self,x_dir:str,model_dir:str,threshold:int,results_dir):
         self.x_dir=x_dir
         self.model_dir=model_dir
         self.model=load_model(model_dir)
         self.input_shape=self.model.layers[0].input_shape[1:-1]
         self.load_image=lambda image_name:Image.open(image_name).resize(self.input_shape)
         self.image_np=lambda image:np.asarray(image)
-        self.tpr_counter=0
+        self.fpr_counter=0
         self.threshold=threshold
+        self.results_dir=results_dir
         self.x_train=[os.path.join(self.x_dir,image_name) for image_name in os.listdir(x_dir)]
         self.hash_layer_index=[i for i,layer in enumerate(self.model.layers) if layer.output_shape==(None,8,8,16)][-1]
         assert(len(self.x_train)>0)
@@ -602,13 +611,19 @@ class DiscernibiltyTest:
             
             return hash_output
 
-    def __call__(self,n_samples=10):
+    def __call__(self,n_samples=None,threshold=None,write=False):
         '''
         n_samples is the number of samples for which the discerniblity test will be performed
         '''
-        l1=np.zeros(n_samples)
-
-        for i in tqdm(range(n_samples)):
+        print('the  number of samples is {}'.format(n_samples))
+        if threshold is not None:
+            self.threshold=threshold
+        if n_samples is  None:
+            total_samples=len(self.x_train)
+        else:
+           total_samples=n_samples
+        l1=np.zeros(int(total_samples/2*(total_samples-1)))
+        for i in tqdm(range(int(total_samples*(total_samples-1)/2))):
             first_image_name=choice(self.x_train)
             second_image_name=choice(self.x_train)
             while  first_image_name==second_image_name:
@@ -623,12 +638,17 @@ class DiscernibiltyTest:
             second_hash=self.find_output(second_image_np/255)
             corr=np.corrcoef(first_hash,second_hash)[0][1]
             logging.debug('correlation coefficient is {}'.format(corr))
-            if corr<self.threshold:
-                self.tpr_counter+=1
+            if corr>=self.threshold:
+                self.fpr_counter+=1
             l1[i]=corr
             gc.collect()
-        
-        return l1,self.tpr_counter/n_samples
+        if write:
+            with open(os.path.join(self.results_dir,'different_correlation'),'a') as fp:
+                for values in l1:
+                    fp.write(str(values)+'\n')
+            logging.debug('writing results to file')
+
+        return l1,self.fpr_counter/n_samples
 
 
 
@@ -680,51 +700,82 @@ def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
     with open(os.path.join(results_dir,'rotation.txt'),'a') as fp:
         fp.write(str(d1))
 
-def discernibilityTest(x_dir,model_dir,threshold,results_dir,write=False,n_samples=10):
-    print('currently doing discernibilty test')
-    test=DiscernibiltyTest(x_dir,model_dir,threshold)
-    correlation_coefficients,tpr_counter=test(n_samples)
-    if write:
-        with open(os.path.join(results_dir,'discrenibilty.txt'),'a') as fp:
-            fp.write('Mean {} Std {} Tpr {}'.format(correlation_coefficients.mean(),correlation_coefficients.std(),tpr_counter))
+def discernibilityTest(results_dir,threshold=0.98,plot=False):
+    print('Currently doing discernibility test')
+    with open(os.path.join(results_dir,'different_correlation')) as fp:
+        lines=[float(line) for line in fp.readlines()]
 
-    logging.debug(correlation_coefficients)
-    return correlation_coefficients,tpr_counter
+        if plot:
+            plt.scatter(range(len(lines)),lines,c='k')
+            plt.plot(range(len(lines)),[threshold]*(len(lines)),color='k',label='Threshold line')
+            plt.legend()
+            plt.xlabel('Image Pair Number')
+            plt.ylim(0,len(lines))
+            plt.ylabel('Hash Correlation Coefficient')
 
-def modelTest2(original_dir:list,tampered_dir:list,model_dir:list,results_dir:list,different_dir=None,threshold=0.98,ns=10,nd=10):
+        fpr_counter=len(list(filter(lambda x:x>threshold,lines)))
+        return lines,fpr_counter/len(lines)
+def modelTest2(results_dir,threshold=0.98,plot=False):
     '''
     just find the hash correlation for images undergoing content preserving operations and images having totally different content
     here we are doing this only for aerials dataset as bechmarks are only available for this one
     the different_dir wll conttain the path of all the different images whose combinations we are to take
 
     and remember always thakuria keyword arguments always come after positional arguments you stupid fuck
+    ''' 
+
+    with open(os.path.join(results_dir,'same_correlation')) as fp:
+        same_corrleation_coefficients=[float(line) for line in fp.readlines()]
+        tpr_counter=len(list(filter(lambda x: x>threshold,same_corrleation_coefficients)))
+    tpr_rate=tpr_counter/len(same_corrleation_coefficients)
+        
+    different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
+    if plot:
+        same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
+        counts1,bins1=np.histogram(same_corrleation_coefficients,bins=500,density=True)
+        counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=500,density=True)
+        plt.hist(bins1[:-1],bins1,weights=counts1,label='same_correation_coefficients',color='b')
+        plt.hist(bins2[:-1],bins2,weights=counts2,label='different_correlation_coefficients',color='r')
+        plt.ylim(0,15)
+
+        plt.legend()
+        plt.savefig(os.path.join(results_dir,'Distribution.jpg'))
+
+    return same_corrleation_coefficients,different_correlation_coefficients,tpr_rate,fpr_rate
+def modelTest3(results_dir,threshold_start=0.80,threshold_end=0.9999,threshold_step=0.0001):
+    tpr_value=[]
+    fpr_value=[]
+    while threshold_start<=threshold_end:
+        print('The threshold is set at {}'.format(threshold_start))
+        _,_,_tpr_value,_fpr_value=modelTest2(results_dir,threshold_start)
+        tpr_value.append(_tpr_value)
+        fpr_value.append(_fpr_value)
+        threshold_start+=threshold_step
+    plt.plot(fpr_value,tpr_value,'xb-') # x markers and blue lines
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('TPR vs FPR rates for different thresholds')
+    plt.savefig(os.path.join(results_dir,'Diff_threshold.jpg'))
+
+def modelTest4(original_dir,tampered_dir,model_dir,results_dir,different_dir):
     '''
-    operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
-    test=ModelTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
-    same_corrleation_coefficients=[]
-    for operation in operations:
-        print('Operaton {}'.format(operation))
-        correlation_coefficients,tpr_value,fpr_value=test(operation,ns)
-        if correlation_coefficients is not None:
-        	same_corrleation_coefficients+=correlation_coefficients
-    del test
-    gc.collect()
-
-    different_correlation_coefficients,fpr_rate=discernibilityTest(different_dir,model_dir,threshold,results_dir,n_samples=nd)
-    
-    same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
-    # bins1,_=np.histogram(same_corrleation_coefficients,bins=30,density=True)
-    # bins2,_=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=10,density=True)
-    plt.hist(same_corrleation_coefficients)
-    plt.hist(different_correlation_coefficients)
-    plt.legend()
-    plt.show()
+    this is for writing the results to the text file
+    '''
+    #same_test=ModelTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+    different_test=DiscernibiltyTest(different_dir,model_dir,0.98,results_dir=results_dir)
+    # operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
+    # for operation in operations:
+    #     _,_,_=same_test(operation,write=True)
+    # del same_test
+    different_test(n_samples=50,write=True)
 
 
-    
 if __name__=='__main__':
     '''
     These directories are for testing the model for the graphs
+    modelTest1 is just for computing the tpr and the fpr scores
+    modelTest2 is for plotting the distirbution of similarity and dissimilarity 
+    modelTest3 is for plotting the distribution of tpr and fpr scores for different thresholds
     '''
     original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
     tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
@@ -738,12 +789,12 @@ if __name__=='__main__':
 
     logging.basicConfig(level=logging.DEBUG)
     logging.disable(logging.DEBUG)
-    #discernibilityTest(different_dir,model_dir,0.98,results_dir)
+    #discernibilityTest(results_dir,plot=True,threshold=0.98)
     #modelTest1(original_dir,tampered_dir,model_dir,results_dir)
     #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
-    modelTest2(original_dir,tampered_dir,model_dir,results_dir,different_dir=different_dir,threshold=0.98)
-
-
+    #modelTest2(results_dir,threshold=0.98,plot=True)
+    modelTest3(results_dir)
+    #modelTest4(original_dir,tampered_dir,model_dir,results_dir,different_dir)
     # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
     # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
     # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
