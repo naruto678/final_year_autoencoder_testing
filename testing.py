@@ -125,7 +125,7 @@ class LocalizationTest:
         
         return len(x1)/len(x2)
     
-    def __call__(self,v=False):
+    def __call__(self,v=False,write=False):
         '''
         This takes the original_image and the tampered image and saves the difference image
         '''
@@ -135,6 +135,7 @@ class LocalizationTest:
         print('Found {} images corresponding to this'.format(len(os.listdir(self.original_dir))))
         correlation_coefficients=[]
         f1_scores=[]
+
         for i in tqdm(range(len(os.listdir(self.original_dir)))):
             original_image_name=next(_x)
 
@@ -163,26 +164,32 @@ class LocalizationTest:
             
             '''
              
-            result_img=np.zeros(original_map.shape)
             
-            
-            result_img[diff_map>=0.05]=tampered_image_np[diff_map>=0.05] # this is the tampered part
-            result_img[diff_map<0.1]=0 # this is not the tampered part
-
-            final_image=self.concat_images(original_image_np,tampered_image_np,org_diff_map,result_img)
-            final_image=final_image.astype(np.uint8)
             if v:
                 Image.fromarray(final_image).show()
                 exit()
+            if write is False:
+                result_img=np.zeros(original_map.shape)
+            
+            
+                result_img[diff_map>=0.05]=tampered_image_np[diff_map>=0.05] # this is the tampered part
+                result_img[diff_map<0.1]=0 # this is not the tampered part
 
-            self.save_PIL(Image.fromarray(final_image),original_image_name[original_image_name.rfind('/')+1:])
-            f1=self.f1_score(diff_map,org_diff_map)
-            original_hash=self.find_output(original_image_np)
-            tampered_hash=self.find_output(tampered_image_np)
-            correlation=np.corrcoef(original_hash,tampered_hash)[0][1]
-            self.classifier(correlation)
-            correlation_coefficients.append(correlation)
-            f1_scores.append(f1)
+                final_image=self.concat_images(original_image_np,tampered_image_np,org_diff_map,result_img)
+                final_image=final_image.astype(np.uint8)
+                self.save_PIL(Image.fromarray(final_image),original_image_name[original_image_name.rfind('/')+1:])
+                f1=self.f1_score(diff_map,org_diff_map)
+                original_hash=self.find_output(original_image_np)
+                tampered_hash=self.find_output(tampered_image_np)
+                correlation=np.corrcoef(original_hash,tampered_hash)[0][1]
+                self.classifier(correlation)
+                correlation_coefficients.append(correlation)
+                f1_scores.append(f1)
+            else:
+                original_hash=self.find_output(original_image_np)
+                tampered_hash=self.find_output(tampered_image_np)
+                correlation=np.corrcoef(original_hash,tampered_hash)[0][1]
+                correlation_coefficients.append(correlation)
             original_image.close()
             tampered_image.close()
             
@@ -670,9 +677,11 @@ class DiscernibiltyTest:
                         logging.debug('correlation coefficient is {}'.format(corr))
                         first_image.close()
                         second_image.close()
+                        
                         del first_image_np,first_hash
                         del second_image_np,second_hash
                         gc.collect()
+
                         if corr>=self.threshold:
                             self.fpr_counter+=1
                         l1[i]=corr
@@ -717,14 +726,19 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
     for i in range(len(original_dir)):
         org_dir,tamp_dir=original_dir[i],tampered_dir[i]
         test=LocalizationTest(org_dir,tamp_dir,results_dir,model_dir,0.98)
-        correlation,f1_scores,false_counter=test()         
-        visualize=Visualize(results_dir,org_dir)
+        correlation,f1_scores,false_counter=test(write=True)         
+        #visualize=Visualize(results_dir,org_dir)
         #visualize(correlation,0,false_counter,'tampering {} '.format(i))
-        visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
-        with open(os.path.join(results_dir,'tampering_text_{}'.format(i)),'a') as f:
-             
-            f.write('The f1 scores are: '+str(f1_scores))
-            f.write('The false counter is '+str(false_counter))
+        #visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
+        with open(os.path.join(results_dir,'f1_scores'),'a') as fp:
+            for score in f1_scores:
+                fp.write(str(score)+'\n')
+        with open(os.path.join(results_dir,'fpr'),'a') as fp:
+            fp.write(str(fp)) 
+        with open(os.path.join(results_dir,'tampred_hash_correlation'),'a') as fp:
+            for corr in correlation:
+                fp.write(str(corr)+'\n')
+            
 def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
     print('Currently doing rotation test')
     rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
@@ -775,8 +789,8 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
     different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
     if plot:
         same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
-        counts1,bins1=np.histogram(same_corrleation_coefficients,bins=300,density=True)
-        counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=300,density=True)
+        counts1,bins1=np.histogram(same_corrleation_coefficients,bins=500,density=True)
+        counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=500,density=True)
         plt.hist(bins1[:-1],bins1,weights=counts1,label='same_correation_coefficients',color='b')
         plt.hist(bins2[:-1],bins2,weights=counts2,label='different_correlation_coefficients',color='r')
         plt.ylim(0,15)
@@ -812,6 +826,37 @@ def writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir):
     
     different_test(n_samples=100,write=True)
 
+def modelTest5(results_dir,threshold=0.98):
+    lines=[]
+    with open(os.path.join(results_dir,'tampred_hash_correlation'),'r') as fp:
+        for line in fp.readlines():
+            try:
+                lines.append(float(line))
+            except:
+                continue
+        assert(len(lines)>0)
+    assert(len(lines)>0)
+
+    plt.scatter(range(len(lines)),lines,c='red',label='Hash correlation')
+    plt.plot(range(len(lines)),[threshold]*len(lines),label='Threshold_line')
+    plt.xlabel('tampered pair number')
+    plt.ylabel('Hash correlation')
+    plt.title('Hash correlation vs tampered pair')
+    plt.legend()
+    plt.show()
+    plt.savefig(os.path.join(results_dir,'Tampered_scatter.jpg'))
+
+def modelTest6(results_dir,threshold=0.98):
+    with open(os.path.join(results_dir,'same_correlation')) as fp:
+        lines=[float(line) for line in fp.readlines()]
+    plt.scatter(range(len(lines)),lines,c='red',label='Hash correlation')
+    plt.plot(range(len(lines)),[threshold]*len(lines),label='Threshold line')
+    plt.ylabel('Hash correlation ')
+    plt.xlabel('Similar image pairs')
+    plt.title('Hash correlation vs similar image pairs')
+    plt.legend()
+    plt.savefig(os.path.join(results_dir,'similar_pairs.jpg'))
+
 
 if __name__=='__main__':
     '''
@@ -832,12 +877,14 @@ if __name__=='__main__':
 
     logging.basicConfig(level=logging.DEBUG)
     logging.disable(logging.DEBUG)
-    discernibilityTest(results_dir,plot=True,threshold=0.98)
+    #discernibilityTest(results_dir,plot=True,threshold=0.98)
     #modelTest1(original_dir,tampered_dir,model_dir,results_dir)
     #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
     #modelTest2(results_dir,threshold=0.98,plot=True)
     #modelTest3(results_dir)
     #writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
+    modelTest6(results_dir,0.98)
+
     # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
     # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
     # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
