@@ -130,9 +130,7 @@ class LocalizationTest:
         logging.debug(org_diff_map)
         
         diff=result_img-org_diff_map
-        print(len(diff[diff[:,:,0]==700])+len(diff[diff[:,:,1]==700])+len(diff[diff[:,:,2]==700]))
-        print(len(org_diff_map[org_diff_map[:,:,0]==300])+len(org_diff_map[org_diff_map[:,:,1]==300])+len(org_diff_map[org_diff_map[:,:,2]==300]))        
-        
+         
 
 
         return (len(diff[diff[:,:,0]==700])+len(diff[diff[:,:,1]==700])+len(diff[diff[:,:,2]==700]))/(len(org_diff_map[org_diff_map[:,:,0]==300])+len(org_diff_map[org_diff_map[:,:,1]==300])+len(org_diff_map[org_diff_map[:,:,2]==300]))        
@@ -185,7 +183,7 @@ class LocalizationTest:
             '''
              
             
-            if write is False:
+            if not write :
                 result_img=np.zeros(original_map.shape)
                 compare_img=np.zeros(original_map.shape)
             
@@ -791,38 +789,41 @@ def modelTest1(original_dir,tampered_dir,model_dir,results_dir):
                         f.write('{} {} {}'.format(a,b,c))
                     print('Saved the results in the file')
 def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None):
-    l1={0:'large tampered',1:'medium tampered',2:"small tampered"}
+    
     print('Doing the localization test')
     for i in range(len(original_dir)):
-        org_dir,tamp_dir=original_dir[i],tampered_dir[i]
-        test=LocalizationTest(org_dir,tamp_dir,results_dir,model_dir,0.98)
+        org_dir,tamp_dir,res_dir=original_dir[i],tampered_dir[i],results_dir[i]
+        if not os.path.exists(results_dir[i]):
+            os.mkdir(results_dir[i])
+        test=LocalizationTest(org_dir,tamp_dir,res_dir,model_dir,0.98)
         correlation,f1_scores,false_counter,image_names=test(write_with_name=True)         
         
         if write:
-            with open(os.path.join(results_dir,'f1_scores'),'a') as fp:
+            with open(os.path.join(res_dir,'f1_scores'),'a') as fp:
                 for score in f1_scores:
                     fp.write(str(score)+'\n')
-            with open(os.path.join(results_dir,'fpr'),'a') as fp:
+            with open(os.path.join(res_dir,'fpr'),'a') as fp:
                 fp.write(str(fp)) 
-            with open(os.path.join(results_dir,'tampred_hash_correlation'),'a') as fp:
+            with open(os.path.join(res_dir,'tampred_hash_correlation'),'a') as fp:
                 for corr in correlation:
         
                     fp.write(str(corr)+'\n')
         
         elif plot:
-            visualize=Visualize(results_dir,org_dir)
+            visualize=Visualize(res_dir,org_dir)
             visualize(correlation,0,false_counter,'tampering {} '.format(i))
             visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
         if hash_corr_with_image_no:
-            with open(os.path.join(results_dir,'tampred_hash_correlation.txt'),'a') as fp:
+            with open(os.path.join(res_dir,'tampred_hash_correlation.txt'),'a') as fp:
                 for i in range(len(correlation)):
                     fp.write(str(correlation[i])+' '+' '+image_names[i]+'\n')
-
-            with open(os.path.join(results_dir,'f1_scores.txt'),'a') as fp:
+            print('Finished writing results to tampred_hash_correlation.txt')
+            with open(os.path.join(res_dir,'f1_scores.txt'),'a') as fp:
                 for i in range(len(correlation)):
-                    fp.write(str(f1_scores[0])+'\n')
-
+                    fp.write(str(f1_scores[i])+' '+image_names[i]+'\n')
+            print('Finished writing results to f1_scores.txt')
 def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
+
     print('Currently doing rotation test')
     rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
     d1=rotation()
@@ -971,7 +972,7 @@ if __name__=='__main__':
 
 
     logging.basicConfig(level=logging.DEBUG)
-    #logging.disable(logging.DEBUG)
+    logging.disable(logging.DEBUG)
     
     # discernibilityTest(results_dir,plot=True,threshold=0.98)
     # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
@@ -987,9 +988,9 @@ if __name__=='__main__':
 
     original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
     tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
+    results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
     model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)    
+    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)   
 
     
  
