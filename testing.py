@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 from matplotlib.ticker import PercentFormatter
 from random import choice
+import random
 class LocalizationTest:
     '''
     The main purpose of this class is to get the original_dir and the test_dir and then save the results in the results_dir
@@ -85,11 +86,11 @@ class LocalizationTest:
 
         return new_img
 
-    def concat_images(self,imga,imgb,imgc,imgd,debug=False,):
+    def concat_images(self,imga,imgb,imgc,debug=False,):
     
         new_image=self.concat_images_util(imga,imgb,debug)
         new_image=self.concat_images_util(new_image,imgc,debug)
-        return self.concat_images_util(new_image,imgd,debug)
+        return new_image
     def save_PIL(self,image_file,image_name):
         image_file=image_file.convert('RGB')
         logging.debug(os.path.join(self.results_dir,image_name))
@@ -117,15 +118,28 @@ class LocalizationTest:
         if correlation > self.threshold:
             self.false_counter+=1
 
-    def f1_score(self,diff_map,original_diff_map):
-        x1=np.argwhere(diff_map>0.05)
-        x2=np.argwhere(original_diff_map>0)
-        logging.debug(x1.shape)
+    def f1_score(self,result_img,org_diff_map):
+        '''
+        both of these shits are numpy arrays so go nuts
+        the compare_img is set at 300 and the result_img is set at 1000 hence just get the region having the 700 part
+        '''
+        # result_img=result_img.reshape(-1,self.input_shape[0],self.input_shape[1])
+        # org_diff_map=org_diff_map.reshape(-1,self.input_shape[0],self.input_shape[1])
+ 
+        logging.debug(result_img)
+        logging.debug(org_diff_map)
         
+        diff=result_img-org_diff_map
+        print(len(diff[diff[:,:,0]==700])+len(diff[diff[:,:,1]==700])+len(diff[diff[:,:,2]==700]))
+        print(len(org_diff_map[org_diff_map[:,:,0]==300])+len(org_diff_map[org_diff_map[:,:,1]==300])+len(org_diff_map[org_diff_map[:,:,2]==300]))        
         
-        return len(x1)/len(x2)
+
+
+        return (len(diff[diff[:,:,0]==700])+len(diff[diff[:,:,1]==700])+len(diff[diff[:,:,2]==700]))/(len(org_diff_map[org_diff_map[:,:,0]==300])+len(org_diff_map[org_diff_map[:,:,1]==300])+len(org_diff_map[org_diff_map[:,:,2]==300]))        
+        
+
     
-    def __call__(self,v=False,write=False):
+    def __call__(self,v=False,write=False,write_with_name=False):
         '''
         This takes the original_image and the tampered image and saves the difference image
         '''
@@ -135,7 +149,10 @@ class LocalizationTest:
         print('Found {} images corresponding to this'.format(len(os.listdir(self.original_dir))))
         correlation_coefficients=[]
         f1_scores=[]
-
+        map_threshold=5
+        org_threshold=30
+        self.first_number=300
+        self.second_number=1000
         for i in tqdm(range(len(os.listdir(self.original_dir)))):
             original_image_name=next(_x)
 
@@ -145,18 +162,21 @@ class LocalizationTest:
 
             original_image_np=self.image_np(original_image)
             tampered_image_np=self.image_np(tampered_image)
-            original_map=self.predict(original_image_np)[0,:,:,:]
-            tampered_map=self.predict(tampered_image_np)[0,:,:,:]
+            original_map=self.predict(original_image_np)[0,:,:,:]*255
+            tampered_map=self.predict(tampered_image_np)[0,:,:,:]*255
+            
             diff_map=original_map-tampered_map
             diff_map[diff_map<0]=-diff_map[diff_map<0]
             org_diff_map=original_image_np-tampered_image_np
-            org_diff_map[org_diff_map<0]=-org_diff_map[org_diff_map<0]
+            org_diff_map[org_diff_map<=0]=-org_diff_map[org_diff_map<=0]
+
             
             logging.debug(original_image_name)
             logging.debug(original_image_np.shape)
             logging.debug(tampered_image_np.shape)
             logging.debug(original_map.shape)
             logging.debug(tampered_map.shape)
+            logging.debug(org_diff_map)
 
             '''
             Where there is difference show black 
@@ -165,26 +185,41 @@ class LocalizationTest:
             '''
              
             
-            if v:
-                Image.fromarray(final_image).show()
-                exit()
             if write is False:
                 result_img=np.zeros(original_map.shape)
+                compare_img=np.zeros(original_map.shape)
             
-            
-                result_img[diff_map>=0.05]=tampered_image_np[diff_map>=0.05] # this is the tampered part
-                result_img[diff_map<0.1]=0 # this is not the tampered part
-
-                final_image=self.concat_images(original_image_np,tampered_image_np,org_diff_map,result_img)
+                result_img[diff_map[:,:,0]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,1]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,2]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,0]<map_threshold]=0# this is the not  tampered part
+                result_img[diff_map[:,:,1]<map_threshold]=0# this is the not tampered part
+                result_img[diff_map[:,:,2]<map_threshold]=0# this is the not tampered part
+                
+                    
+                final_image=self.concat_images(tampered_image_np,original_image_np,result_img/self.second_number*original_image_np)
                 final_image=final_image.astype(np.uint8)
                 self.save_PIL(Image.fromarray(final_image),original_image_name[original_image_name.rfind('/')+1:])
-                f1=self.f1_score(diff_map,org_diff_map)
+                compare_img[org_diff_map[:,:,0]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,1]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,2]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,0]<org_threshold]=0
+                compare_img[org_diff_map[:,:,1]<org_threshold]=0
+                logging.debug('set all the values to the first number')
+                compare_img[org_diff_map[:,:,2]<org_threshold]=0
+                logging.debug('This is the original_diff_map')
+                logging.debug(compare_img)
+                f1=self.f1_score(result_img,compare_img)
+                logging.debug(f1)
                 original_hash=self.find_output(original_image_np)
                 tampered_hash=self.find_output(tampered_image_np)
                 correlation=np.corrcoef(original_hash,tampered_hash)[0][1]
                 self.classifier(correlation)
                 correlation_coefficients.append(correlation)
                 f1_scores.append(f1)
+                if v:
+                    Image.fromarray(final_image).show()
+                    sys.exit()
             else:
                 original_hash=self.find_output(original_image_np)
                 tampered_hash=self.find_output(tampered_image_np)
@@ -192,6 +227,9 @@ class LocalizationTest:
                 correlation_coefficients.append(correlation)
             original_image.close()
             tampered_image.close()
+
+        if write_with_name:
+            return correlation_coefficients,f1_scores,self.false_counter,os.listdir(self.original_dir)
             
         return correlation_coefficients,f1_scores,self.false_counter
 
@@ -690,6 +728,38 @@ class DiscernibiltyTest:
 
         
         return l1,self.fpr_counter/n_samples
+class ComparisonTest(ModelTest):
+    def __init__(self,x_dir,y_dir,model_dir,threshold,results_dir):
+        super().__init__(x_dir,y_dir,model_dir,threshold,results_dir)
+    def __call__(self,folder_name=None,image_name=None,operation_name=None,plot=False,show=False):
+        if folder_name is  None:
+            raise ValueError('You need to specify the folder name')
+        if image_name is None:
+            raise ValueError('You need to specify the image name')
+        if operation_name is None:
+            raise ValueError('You need to specify the operation name')
+        for _image_name in image_name:
+
+            self.indexes=[i for i,image  in enumerate(self.x_train) if folder_name in image and _image_name in image and operation_name in image]
+            print(_image_name,len(image_name))
+            correlation_coefficients=self.hash_correlation(operation_name)
+            assert('ModelTest' in results_dir)
+            if plot:
+                if len(correlation_coefficients)<=0:
+                    return 
+                assert(len(correlation_coefficients)>0)
+                plt.plot(range(len(correlation_coefficients)),correlation_coefficients,'xb-',label='Hash correlation for {}'.format(operation_name))
+                plt.plot(range(len(correlation_coefficients)),[self.threshold]*(len(correlation_coefficients)),label='Threshold Line')
+                plt.ylabel('Hash correlation for {}'.format(operation_name))
+                plt.xlabel('Image Number')
+                plt.legend()
+                if show:
+                    plt.show()
+                    sys.exit()
+                plt.savefig(os.path.join(results_dir,'{0} {1} Comparison_{2}.jpg'.format(folder_name,image_name,operation_name)))
+            
+        plt.close()
+
 
 
 
@@ -720,25 +790,38 @@ def modelTest1(original_dir,tampered_dir,model_dir,results_dir):
                     for (a,b),c in visualize.dictionary.items():
                         f.write('{} {} {}'.format(a,b,c))
                     print('Saved the results in the file')
-def localTest(oiginal_dir,tampered_dir,model_dir,results_dir):
+def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None):
     l1={0:'large tampered',1:'medium tampered',2:"small tampered"}
     print('Doing the localization test')
     for i in range(len(original_dir)):
         org_dir,tamp_dir=original_dir[i],tampered_dir[i]
         test=LocalizationTest(org_dir,tamp_dir,results_dir,model_dir,0.98)
-        correlation,f1_scores,false_counter=test(write=True)         
-        #visualize=Visualize(results_dir,org_dir)
-        #visualize(correlation,0,false_counter,'tampering {} '.format(i))
-        #visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
-        with open(os.path.join(results_dir,'f1_scores'),'a') as fp:
-            for score in f1_scores:
-                fp.write(str(score)+'\n')
-        with open(os.path.join(results_dir,'fpr'),'a') as fp:
-            fp.write(str(fp)) 
-        with open(os.path.join(results_dir,'tampred_hash_correlation'),'a') as fp:
-            for corr in correlation:
-                fp.write(str(corr)+'\n')
-            
+        correlation,f1_scores,false_counter,image_names=test(write_with_name=True)         
+        
+        if write:
+            with open(os.path.join(results_dir,'f1_scores'),'a') as fp:
+                for score in f1_scores:
+                    fp.write(str(score)+'\n')
+            with open(os.path.join(results_dir,'fpr'),'a') as fp:
+                fp.write(str(fp)) 
+            with open(os.path.join(results_dir,'tampred_hash_correlation'),'a') as fp:
+                for corr in correlation:
+        
+                    fp.write(str(corr)+'\n')
+        
+        elif plot:
+            visualize=Visualize(results_dir,org_dir)
+            visualize(correlation,0,false_counter,'tampering {} '.format(i))
+            visualize(f1_scores,0,0,'f1_scores {}'.format(l1[i]),instance='something')
+        if hash_corr_with_image_no:
+            with open(os.path.join(results_dir,'tampred_hash_correlation.txt'),'a') as fp:
+                for i in range(len(correlation)):
+                    fp.write(str(correlation[i])+' '+' '+image_names[i]+'\n')
+
+            with open(os.path.join(results_dir,'f1_scores.txt'),'a') as fp:
+                for i in range(len(correlation)):
+                    fp.write(str(f1_scores[0])+'\n')
+
 def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
     print('Currently doing rotation test')
     rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
@@ -794,12 +877,14 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
         plt.hist(bins1[:-1],bins1,weights=counts1,label='same_correation_coefficients',color='b')
         plt.hist(bins2[:-1],bins2,weights=counts2,label='different_correlation_coefficients',color='r')
         plt.ylim(0,15)
-
+        plt.xlabel('Hash Correlation coefficient')
+        plt.ylabel('Frequency')
+        plt.plot([threshold]*(15),range(0,15),'k',label='Threshold line')
         plt.legend()
         plt.savefig(os.path.join(results_dir,'Distribution.jpg'))
 
     return same_corrleation_coefficients,different_correlation_coefficients,tpr_rate,fpr_rate
-def modelTest3(results_dir,threshold_start=0.20,threshold_end=0.99,threshold_step=0.005):
+def modelTest3(results_dir,threshold_start=0,threshold_end=0.9999,threshold_step=0.0001,write=False):
     tpr_value=[]
     fpr_value=[]
     while threshold_start<=threshold_end:
@@ -808,6 +893,10 @@ def modelTest3(results_dir,threshold_start=0.20,threshold_end=0.99,threshold_ste
         tpr_value.append(_tpr_value)
         fpr_value.append(_fpr_value)
         threshold_start+=threshold_step
+    if write:
+        print(tpr_value)
+        print(fpr_value)
+        return 
     plt.plot(fpr_value,tpr_value,'xb-') # x markers and blue lines
     plt.xlabel('FPR')
     plt.ylabel('TPR')
@@ -856,6 +945,12 @@ def modelTest6(results_dir,threshold=0.98):
     plt.title('Hash correlation vs similar image pairs')
     plt.legend()
     plt.savefig(os.path.join(results_dir,'similar_pairs.jpg'))
+def comparisonTest(original_dir,tampered_dir,model_dir,threshold,results_dir):
+    operations=['brightness','compression','contrast','gamma','gaussian','rotation','salt and pepper','scaling','speckle','watermark']
+    test=ComparisonTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
+    for operation in operations:
+        test(operation_name=operation,folder_name='operations_indonesia',image_name=['Image01','Image02','Image03','Image04','Image05'],plot=True)
+
 
 
 if __name__=='__main__':
@@ -865,30 +960,36 @@ if __name__=='__main__':
     modelTest2 is for plotting the distirbution of similarity and dissimilarity 
     modelTest3 is for plotting the distribution of tpr and fpr scores for different thresholds
     '''
-    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
-    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
-    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
-    different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
+    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
+    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
+    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
+    # different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
 
 
 
 
 
     logging.basicConfig(level=logging.DEBUG)
-    logging.disable(logging.DEBUG)
-    #discernibilityTest(results_dir,plot=True,threshold=0.98)
-    #modelTest1(original_dir,tampered_dir,model_dir,results_dir)
-    #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+    #logging.disable(logging.DEBUG)
+    
+    # discernibilityTest(results_dir,plot=True,threshold=0.98)
+    # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
+    # rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
     #modelTest2(results_dir,threshold=0.98,plot=True)
-    #modelTest3(results_dir)
-    #writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
-    modelTest6(results_dir,0.98)
+    # modelTest3(results_dir,write=True)
+    # writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
+    # modelTest6(results_dir,0.98)
+    #comparisonTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
+    
 
-    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
-    # localTest(original_dir,tampered_dir,model_dir,results_dir)    
+
+
+    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered'
+    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)    
 
     
  
