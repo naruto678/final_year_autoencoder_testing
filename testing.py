@@ -137,7 +137,7 @@ class LocalizationTest:
         
 
     
-    def __call__(self,v=False,write=False,write_with_name=False):
+    def __call__(self,v=False,write=False,write_with_name=False,concat_image=True):
         '''
         This takes the original_image and the tampered image and saves the difference image
         '''
@@ -194,9 +194,13 @@ class LocalizationTest:
                 result_img[diff_map[:,:,1]<map_threshold]=0# this is the not tampered part
                 result_img[diff_map[:,:,2]<map_threshold]=0# this is the not tampered part
                 
-                    
-                final_image=self.concat_images(tampered_image_np,original_image_np,result_img/self.second_number*original_image_np)
-                final_image=final_image.astype(np.uint8)
+                if concat_image:
+
+                    final_image=self.concat_images(tampered_image_np,original_image_np,result_img/self.second_number*original_image_np)
+                    final_image=final_image.astype(np.uint8)
+                else:
+                    final_image=result_img/self.second_number*original_image_np
+                    final_image=final_image.astype(np.uint8)    
                 self.save_PIL(Image.fromarray(final_image),original_image_name[original_image_name.rfind('/')+1:])
                 compare_img[org_diff_map[:,:,0]>=org_threshold]=self.first_number
                 compare_img[org_diff_map[:,:,1]>=org_threshold]=self.first_number
@@ -225,6 +229,8 @@ class LocalizationTest:
                 correlation_coefficients.append(correlation)
             original_image.close()
             tampered_image.close()
+            del original_image_np,tampered_image_np;
+            gc.collect();
 
         if write_with_name:
             return correlation_coefficients,f1_scores,self.false_counter,os.listdir(self.original_dir)
@@ -968,8 +974,11 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=Fa
         if not os.path.exists(results_dir[i]):
             os.mkdir(results_dir[i])
         test=LocalizationTest(org_dir,tamp_dir,res_dir,model_dir,0.98)
-        correlation,f1_scores,false_counter,image_names=test(write_with_name=True)         
-        
+        if hash_corr_with_image_no:
+
+            correlation,f1_scores,false_counter,image_names=test(concat_image=False)         
+        else:
+            correlation,f1_scores,false_counter=test(concat_image=False)
         if write:
             with open(os.path.join(res_dir,'f1_scores'),'a') as fp:
                 for score in f1_scores:
@@ -1043,6 +1052,8 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
     tpr_rate=tpr_counter/len(same_corrleation_coefficients)
         
     different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
+    logging.debug(len(filter(lambda x : x> 0.98 , different_correlation_coefficients))/len(different_correlation_coefficients))
+    logging.debug(len(filter(lambda x:x<0.98, same_corrleation_coefficients))/len(same_corrleation_coefficients))
     if plot:
         same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
         counts1,bins1=np.histogram(same_corrleation_coefficients,bins=100)
@@ -1106,23 +1117,24 @@ def writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir):
 
 def modelTest5(results_dir,threshold=0.98):
     lines=[]
-    with open(os.path.join(results_dir,'tampred_hash_correlation'),'r') as fp:
-        for line in fp.readlines():
-            try:
-                lines.append(float(line))
-            except:
-                continue
+    for i in range(0,len(results_dir),3):
+        with open(os.path.join(results_dir[i],'tampred_hash_correlation.txt'),'r') as fp:
+            for line in fp.readlines():
+                try:
+                    lines.append(float(line.split(' ')[0]))
+                except:
+                    continue
+            assert(len(lines)>0)
         assert(len(lines)>0)
-    assert(len(lines)>0)
 
-    plt.scatter(range(len(lines)),lines,c='red',label='Hash correlation')
+    plt.scatter(range(len(lines)),lines,c='blue',label='Hash correlation')
     plt.plot(range(len(lines)),[threshold]*len(lines),label='Threshold_line')
     plt.xlabel('tampered pair number')
     plt.ylabel('Hash correlation')
     plt.title('Hash correlation vs tampered pair')
     plt.legend()
     plt.show()
-    plt.savefig(os.path.join(results_dir,'Tampered_scatter.jpg'))
+    plt.savefig(os.path.join(os.getcwd(),'Tampered_scatter.jpg'))
 
 def modelTest6(results_dir,threshold=0.98):
     with open(os.path.join(results_dir,'same_correlation')) as fp:
@@ -1149,11 +1161,11 @@ if __name__=='__main__':
     modelTest2 is for plotting the distirbution of similarity and dissimilarity 
     modelTest3 is for plotting the distribution of tpr and fpr scores for different thresholds
     '''
-    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
-    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
-    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
-    different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
+    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
+    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
+    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
+    # different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
 
 
 
@@ -1165,7 +1177,7 @@ if __name__=='__main__':
     # discernibilityTest(results_dir,plot=True,threshold=0.98)
     # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
     # rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
-    modelTest2(results_dir,threshold=0.98,plot=True)
+    #modelTest2(results_dir,threshold=0.98,plot=True)
     # modelTest3(results_dir,write=True)
     # writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
     # modelTest6(results_dir,0.98)
@@ -1174,11 +1186,12 @@ if __name__=='__main__':
 
 
 
-    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
-    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    # #localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)   
+    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+    results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
+    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=False)   
+    #modelTest5(results_dir,0.98)
 
     # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated small tampered']
     # customTest(original_dir,tampered_dir,model_dir,results_dir,threshold=0.98)    
