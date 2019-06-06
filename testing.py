@@ -147,11 +147,11 @@ class LocalizationTest:
         print('Found {} images corresponding to this'.format(len(os.listdir(self.original_dir))))
         correlation_coefficients=[]
         f1_scores=[]
-        map_threshold=5
+        map_threshold=10
         org_threshold=30
         self.first_number=300
         self.second_number=1000
-        for i in tqdm(range(len(os.listdir(self.original_dir)))):
+        for i in tqdm(range(len(os.listdir(self.original_dir))),ascii=True,desc='Tampering Localization'):
             original_image_name=next(_x)
 
             tampered_image_name=next(_y)
@@ -301,7 +301,7 @@ class ModelTest(Data):
         y_test=(self.image(image_name) for image_name in __y)
 
         correlation_coefficients=[]
-        for i in tqdm(__x):
+        for i in tqdm(__x,ascii=True,desc='ModelTest'):
             _original_image=next(x_test)
             tampered_image=next(y_test)
             original_image=self.detect_RST(_original_image)
@@ -320,7 +320,7 @@ class ModelTest(Data):
         #logging.debug('The correlation coefficient for this operation is {}'.format(correlation_coefficients))
         return correlation_coefficients
 
-    def detect_RST(self,img):
+    def detect_RST(self,img,separate=False):
         '''
         This takes in a PIL image and detects rotation on it and returns the rotated and rescaled image if possible else returns None
         '''
@@ -367,9 +367,12 @@ class ModelTest(Data):
                     logging.debug('the image is rotated clckwise')
                     rotation_degree=min(first_slope,second_slope)
                     img=img.rotate(-rotation_degree)
-                    img=img.crop(img.getbbox()).resize((128,128))
-                
-                    return img
+                    
+                    img1=img.crop(img.getbbox()).resize((128,128))
+                    if separate:
+                        return img,img1
+                    
+                    return img1
                 else:
                     return None    
             elif second_point[0]<63:
@@ -379,9 +382,10 @@ class ModelTest(Data):
                     logging.debug('the image is counterclockwise')
                     rotation_degree=90-max(first_slope,second_slope)
                     img=img.rotate(rotation_degree)
-                    img=img.crop(img.getbbox()).resize((128,128))
-                    
-                    return img
+                    img1=img.crop(img.getbbox()).resize((128,128))
+                    if separate:
+                        return img,img1
+                    return img1
                 else:
                     return None
 
@@ -514,7 +518,7 @@ class RotationTest(ModelTest):
         self.total_dict={i:0 for i in self.angles_list}
         self.detect_dict={i:0 for i in self.angles_list}
 
-    def hash_correlation(self,tampered_image_name:str,original_image_name:str)->None:
+    def hash_correlation(self,tampered_image_name:str,original_image_name:str,write=False)->None:
         '''
         gets the original iamge and the tampered image name and sends the correlation coefficient 
         '''
@@ -532,15 +536,18 @@ class RotationTest(ModelTest):
         original_image.close()
         tampered_image.close()
         gc.collect()
+        
         rotation_degree=int(tampered_image_name[tampered_image_name.find('ROT_')+4:-4])
         
+        
+
         if rotation_degree not in self.angles_list:
             raise ValueError('{} degree is not present in the angles list'.format(rotation_degree))
         self.total_dict[rotation_degree]+=1
         if c>=0.98:
             self.detect_dict[rotation_degree]+=1
         
-    def detect_RST(self,img):
+    def detect_RST(self,img,separate=False):
         '''
         This takes in a PIL image and detects rotation on it and returns the rotated and rescaled image if possible else returns None
         '''
@@ -583,17 +590,19 @@ class RotationTest(ModelTest):
                 second_slope=compute_slope(fourth_point,third_point)
                 rotation_degree=min(first_slope,second_slope)
                 img=img.rotate(-rotation_degree)
-                img=img.crop(img.getbbox()).resize((128,128))
-                
-                return img    
+                img1=img.crop(img.getbbox()).resize((128,128))
+                if separate:
+                    return img,img1
+                return img1    
             elif second_point[0]<63:
                 first_slope=compute_slope(first_point,second_point)
                 second_slope=compute_slope(fourth_point,third_point)
                 rotation_degree=90-max(first_slope,second_slope)
                 img=img.rotate(rotation_degree)
-                img=img.crop(img.getbbox()).resize((128,128))
-                
-                return img
+                img1=img.crop(img.getbbox()).resize((128,128))
+                if separate:
+                    return img,img1
+                return img1
             else:
                 return None
         except:
@@ -601,6 +610,9 @@ class RotationTest(ModelTest):
 
 
     
+
+
+
 
     def __call__(self,n_samples=None):
         print('Threshold is set at {}'.format(self.threshold))
@@ -668,7 +680,7 @@ class DiscernibiltyTest:
         l1=np.zeros(int(total_samples/2*(total_samples-1)))
         if write:
             with open(os.path.join(self.results_dir,'different_correlation'),'a') as fp:
-                for i in tqdm(range(int(total_samples*(total_samples-1)/2))):
+                for i in tqdm(range(int(total_samples*(total_samples-1)/2)),ascii=True,desc='Rotation Test with write'):
                     first_image_name=choice(self.x_train)
                     second_image_name=choice(self.x_train)
                     while  first_image_name==second_image_name:
@@ -696,7 +708,7 @@ class DiscernibiltyTest:
 
         else:
             l1=np.zeros((total_samples*(total_samples-1))//2)
-            for i in tqdm(range(int(total_samples*(total_samples-1)/2))):
+            for i in tqdm(range(int(total_samples*(total_samples-1)/2)),ascii=True,desc='Rotation Test without write'):
                         first_image_name=choice(self.x_train)
                         second_image_name=choice(self.x_train)
                         while  first_image_name==second_image_name:
@@ -756,6 +768,166 @@ class ComparisonTest(ModelTest):
                     sys.exit()
                 plt.savefig(os.path.join(results_dir,'{0} {1} Comparison_{2}.jpg'.format(folder_name,image_name,operation_name)))
             
+        plt.close()
+
+
+class CustomTest(LocalizationTest):
+    def __init__(self,original_dir,tampered_dir,model_dir,results_dir,threshold):
+        super(LocalizationTest).__init__(original_dir,tampered_dir,model_dir,results_dir,threshold)
+
+    def detect_RST(self,img):
+        '''
+        This takes in a PIL image and detects rotation on it and returns the rotated and rescaled image if possible else returns None
+        '''
+         
+        
+        img=img.resize((128,128))
+        img_array=np.asarray(img)
+        non_points=np.argwhere(img_array>0)
+        x,y=non_points[:,0],non_points[:,1]
+        s1=(max(x),max(y[x==min(x)]))
+        s2=(min(x),min(y[x==max(x)]))
+        s3=(min(x[y==max(y)]),min(y))
+        s4=(min(x[y==min(y)]),max(y))
+        l1=[s1,s2,s3,s4]
+                                                                             
+        def compute_slope(p1,p2):                                           
+            return math.degrees(math.atan(abs((p1[1]-p2[1])/(p1[0]-p2[0]))))
+                                                                    
+        def euqlidean(p1,p2):                                       
+            return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)                                                             
+        three_point=[i for i in l1 if i[1]<127]
+        for i in three_point:
+            if i[1]==0:
+                second_point=i
+            elif i[0]==127:
+                third_point=i
+            elif i[0]==0:
+                first_point=i
+
+        for i in l1:
+            if i not in three_point:
+                fourth_point=i
+                break
+        try:
+
+            
+            
+            if second_point[0]>63:
+                first_slope=compute_slope(first_point,second_point)
+                second_slope=compute_slope(fourth_point,third_point)
+                rotation_degree=min(first_slope,second_slope)
+                img=img.rotate(-rotation_degree)
+                img=img.crop(img.getbbox()).resize((128,128))
+                
+                return img    
+            elif second_point[0]<63:
+                first_slope=compute_slope(first_point,second_point)
+                second_slope=compute_slope(fourth_point,third_point)
+                rotation_degree=90-max(first_slope,second_slope)
+                img=img.rotate(rotation_degree)
+                img=img.crop(img.getbbox()).resize((128,128))
+                
+                return img
+            else:
+                return None
+        except:
+            return None
+
+    def __call__(self,rotation_degree:list,write=False,n_samples=10,sample_list=None):
+        _x=list(os.path.join(self.tampered_dir,i) for i in os.listdir(self.tampered_dir))
+        _y=list(os.path.join(self.original_dir,i) for i in os.listdir(self.original_dir))
+        f1_scores=[]
+        correlation_coefficients=[]
+        map_threshold=10
+        org_threshold=30
+        for i in tqdm(range(n_samples)):
+            index=choice(len(_x))
+            original_image=self.image(self_x[index]) 
+            tampered_image=self.image(self._y[index])
+            for degree in tqdm(rotation_degree):
+                rotated_original_image=original_image.rotate(degree)
+                corrected_original_image=self.detect_RST(rotated_original_image)
+                assert(corrected_original_image is not None)
+                original_image_np=self.image_np(corrected_original_image)
+                tampered_image_np=self.image_np(tampered_image)
+                original_map=self.predict(original_image_np)[0,:,:,:]*255
+                tampered_map=self.predict(tampered_image_np)[0,:,:,:]*255
+            
+                diff_map=original_map-tampered_map
+                diff_map[diff_map<0]=-diff_map[diff_map<0]
+                org_diff_map=original_image_np-tampered_image_np
+                org_diff_map[org_diff_map<=0]=-org_diff_map[org_diff_map<=0]
+
+                result_img=np.zeros(original_map.shape)
+                compare_img=np.zeros(original_map.shape)
+            
+                result_img[diff_map[:,:,0]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,1]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,2]>=map_threshold]=self.second_number# this is the tampered part
+                result_img[diff_map[:,:,0]<map_threshold]=0# this is the not  tampered part
+                result_img[diff_map[:,:,1]<map_threshold]=0# this is the not tampered part
+                result_img[diff_map[:,:,2]<map_threshold]=0# this is the not tampered part
+                
+                    
+                final_image=self.concat_images(tampered_image_np,original_image_np,result_img/self.second_number*original_image_np)
+                final_image=final_image.astype(np.uint8)
+                self.save_PIL(Image.fromarray(final_image),'rotated {}'.format(degree)+original_image_name[original_image_name.rfind('/')+1:])
+                compare_img[org_diff_map[:,:,0]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,1]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,2]>=org_threshold]=self.first_number
+                compare_img[org_diff_map[:,:,0]<org_threshold]=0
+                compare_img[org_diff_map[:,:,1]<org_threshold]=0
+                logging.debug('set all the values to the first number')
+                compare_img[org_diff_map[:,:,2]<org_threshold]=0
+                logging.debug('This is the original_diff_map')
+                logging.debug(compare_img)
+                f1=self.f1_score(result_img,compare_img)
+                logging.debug(f1)
+                original_hash=self.find_output(original_image_np)
+                tampered_hash=self.find_output(tampered_image_np)
+                correlation=np.corrcoef(original_hash,tampered_hash)[0][1]
+                self.classifier(correlation)
+                correlation_coefficients.append(correlation)
+                f1_scores.append(f1)
+                corrected_original_image.close()
+                rotated_original_image.close()    
+
+            return correlation_coefficients,f1_scores
+class ComparisonTest(ModelTest):
+    def __init__(self,x_dir,y_dir,model_dir,threshold,results_dir):
+        super().__init__(x_dir,y_dir,model_dir,threshold,results_dir)
+    def __call__(self,folder_name=None,image_name=None,operation_name=None,plot=False,show=False):
+        color_list=list('bgrcmykw')
+        assert(len(color_list)>=len(image_name))
+        if folder_name is  None:
+            raise ValueError('You need to specify the folder name')
+        if image_name is None:
+            raise ValueError('You need to specify the image name')
+        if operation_name is None:
+            raise ValueError('You need to specify the operation name')
+        for i,_image_name in enumerate(image_name):
+
+            self.indexes=[i for i,image  in enumerate(self.x_train) if folder_name in image and _image_name in image and operation_name in image]
+            print(_image_name,len(image_name))
+            correlation_coefficients=self.hash_correlation(operation_name)
+            assert('ModelTest' in results_dir)
+            if plot:
+                if len(correlation_coefficients)<=0:
+                    return 
+                assert(len(correlation_coefficients)>0)
+                plt.plot(range(len(correlation_coefficients)),correlation_coefficients,'x{}-'.format(color_list[i]),label='Image {:02d}'.format(i))
+                plt.ylabel('image :{:02d}'.format(i))
+                plt.xlabel('Image Pair Number')
+                plt.title('Hash correlation vs image number for {}'.format(operation_name))
+                
+                if show:
+                    plt.show()
+                    sys.exit()
+                
+        plt.plot(range(len(correlation_coefficients)),[self.threshold]*(len(correlation_coefficients)),'k',label='Threshold Line')
+        plt.legend()
+        plt.savefig(os.path.join(results_dir,'{0} {1} Comparison_{2}.jpg'.format(folder_name,image_name,operation_name)))
         plt.close()
 
 
@@ -841,7 +1013,7 @@ def discernibilityTest(results_dir,threshold=0.98,plot=False):
             except:
                 continue
         assert(len(lines)>0)
-        print(len(lines))
+        logging.debug('the total number of correlation coefficients is {}'.format(len(lines)))
 
         if plot:
             plt.scatter(range(len(lines)),lines,c='red',label='Hash Correlation of the point')
@@ -873,15 +1045,31 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
     different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
     if plot:
         same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
-        counts1,bins1=np.histogram(same_corrleation_coefficients,bins=500,density=True)
-        counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=500,density=True)
-        plt.hist(bins1[:-1],bins1,weights=counts1,label='same_correation_coefficients',color='b')
-        plt.hist(bins2[:-1],bins2,weights=counts2,label='different_correlation_coefficients',color='r')
-        plt.ylim(0,15)
+        counts1,bins1=np.histogram(same_corrleation_coefficients,bins=100)
+        counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=100)
+        counts1=np.array(counts1)/sum(counts1)
+        counts2=np.array(counts2)/sum(counts2)
+
+        
+        
+
+        logging.debug(counts1)
+        logging.debug(counts2)
+        
+        markerline1,stemline1,baseline1=plt.stem(bins1[:-1],counts1,label='semantically similar pairs',markerfmt='D',use_line_collection=True)
+        markerline2,stemline2,baseline2=plt.stem(bins2[:-1],counts2,label='dissimilar image pairs',use_line_collection=True)
+        plt.setp(stemline1,linestyle='-',color='blue')
+        plt.setp(stemline2,color='green')
+        plt.setp(baseline1,visible=False)
+        plt.setp(baseline2,visible=False)
+        markerline1.set_markerfacecolor('none')
+        markerline2.set_markerfacecolor('none')
+        plt.ylim(0,min(max(counts1),max(counts2)))
         plt.xlabel('Hash Correlation coefficient')
-        plt.ylabel('Frequency')
+        plt.ylabel('Frequency * {}'.format(min(len(same_corrleation_coefficients),len(different_correlation_coefficients))))
         plt.plot([threshold]*(15),range(0,15),'k',label='Threshold line')
         plt.legend()
+        plt.title('Hash Robustness and discernibility performance')
         plt.savefig(os.path.join(results_dir,'Distribution.jpg'))
 
     return same_corrleation_coefficients,different_correlation_coefficients,tpr_rate,fpr_rate
@@ -961,11 +1149,11 @@ if __name__=='__main__':
     modelTest2 is for plotting the distirbution of similarity and dissimilarity 
     modelTest3 is for plotting the distribution of tpr and fpr scores for different thresholds
     '''
-    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
-    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
-    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
-    # different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
+    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
+    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
+    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
+    different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
 
 
 
@@ -977,7 +1165,7 @@ if __name__=='__main__':
     # discernibilityTest(results_dir,plot=True,threshold=0.98)
     # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
     # rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
-    #modelTest2(results_dir,threshold=0.98,plot=True)
+    modelTest2(results_dir,threshold=0.98,plot=True)
     # modelTest3(results_dir,write=True)
     # writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
     # modelTest6(results_dir,0.98)
@@ -986,13 +1174,14 @@ if __name__=='__main__':
 
 
 
-    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
-    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)   
+    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+    # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
+    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    # #localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=True)   
 
-    
+    # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated small tampered']
+    # customTest(original_dir,tampered_dir,model_dir,results_dir,threshold=0.98)    
  
 
 
