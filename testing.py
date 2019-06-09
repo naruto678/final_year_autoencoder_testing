@@ -4,6 +4,7 @@
 '''
 from keras.models import load_model
 import os
+import sys
 import time
 from PIL import Image
 import numpy as np
@@ -543,14 +544,17 @@ class RotationTest(ModelTest):
         self.total_dict={i:0 for i in self.angles_list}
         self.detect_dict={i:0 for i in self.angles_list}
 
-    def hash_correlation(self,tampered_image_name:str,original_image_name:str,write=False)->None:
+    def hash_correlation(self,tampered_image_name:str,original_image_name:str,write=False,correction=True)->None:
         '''
         gets the original iamge and the tampered image name and sends the correlation coefficient 
         '''
 
         original_image=self.image(original_image_name)
         _tampered_image=self.image(tampered_image_name)
-        tampered_image=self.detect_RST(_tampered_image)
+        if correction:
+            tampered_image=self.detect_RST(_tampered_image)
+        else:
+            tampered_image=_tampered_image
         if tampered_image is None:
             tampered_image=_tampered_image
 
@@ -610,7 +614,7 @@ class RotationTest(ModelTest):
 
             
             
-            if second_point[0]>63:
+            if second_point[0]>fourth_point[0]:
                 first_slope=compute_slope(first_point,second_point)
                 second_slope=compute_slope(fourth_point,third_point)
                 rotation_degree=min(first_slope,second_slope)
@@ -619,7 +623,7 @@ class RotationTest(ModelTest):
                 if separate:
                     return img,img1
                 return img1    
-            elif second_point[0]<63:
+            elif second_point[0]<fourth_point[0]:
                 first_slope=compute_slope(first_point,second_point)
                 second_slope=compute_slope(fourth_point,third_point)
                 rotation_degree=90-max(first_slope,second_slope)
@@ -639,21 +643,25 @@ class RotationTest(ModelTest):
 
 
 
-    def __call__(self,n_samples=None):
+    def __call__(self,n_samples=None,correction=True):
         print('Threshold is set at {}'.format(self.threshold))
         if n_samples is None:
             n_samples=len(self.image_pairs)
         else:
             n_samples=n_samples
-        for tampered_image,original_image in tqdm(self.image_pairs[:n_samples]):
-            self.hash_correlation(tampered_image,original_image)
+        for tampered_image,original_image in tqdm(self.image_pairs[:n_samples],desc='Rotation Test'):
+            self.hash_correlation(tampered_image,original_image,correction=correction)
         assert(len(self.total_dict)==len(self.detect_dict))
         self.detect_dict={a:self.detect_dict[a]/b for (a,b) in self.total_dict.items()}
         
         
         x=sorted(self.detect_dict.keys())
         y=[self.detect_dict[i] for i in x]
-        plt.bar(x,y)
+        
+
+
+        plt.bar(x,y,align='center')
+        plt.locator_params(axis='x', nbins=20)
         plt.xlabel('degree of rotation')
         plt.ylabel('true positive rate')
         plt.title('tpr vs degree')
@@ -1027,11 +1035,11 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=Fa
                 for i in range(len(correlation)):
                     fp.write(str(f1_scores[i])+' '+image_names[i]+'\n')
             print('Finished writing results to f1_scores.txt')
-def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir):
+def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir,correction=True):
 
     print('Currently doing rotation test')
     rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
-    d1=rotation()
+    d1=rotation(correction=correction,n_samples=200)
     with open(os.path.join(results_dir,'rotation.txt'),'a') as fp:
         fp.write(str(d1))
 
@@ -1061,7 +1069,7 @@ def discernibilityTest(results_dir,threshold=0.98,plot=False):
             plt.savefig(os.path.join(results_dir,'Discernibility.jpg'))
         fpr_counter=len(list(filter(lambda x:x>threshold,lines)))
         return lines,fpr_counter/len(lines)
-def modelTest2(results_dir,threshold=0.98,plot=False):
+def modelTest2(results_dir,threshold=0.98,plot=False,show=True):
     '''
     just find the hash correlation for images undergoing content preserving operations and images having totally different content
     here we are doing this only for aerials dataset as bechmarks are only available for this one
@@ -1076,8 +1084,8 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
     tpr_rate=tpr_counter/len(same_corrleation_coefficients)
         
     different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
-    logging.debug(len(filter(lambda x : x> 0.98 , different_correlation_coefficients))/len(different_correlation_coefficients))
-    logging.debug(len(filter(lambda x:x<0.98, same_corrleation_coefficients))/len(same_corrleation_coefficients))
+    logging.debug(len(list(filter(lambda x : x> 0.98 , different_correlation_coefficients)))/len(different_correlation_coefficients))
+    logging.debug(len(list(filter(lambda x:x<0.98, same_corrleation_coefficients)))/len(same_corrleation_coefficients))
     if plot:
         same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
         counts1,bins1=np.histogram(same_corrleation_coefficients,bins=100)
@@ -1100,17 +1108,21 @@ def modelTest2(results_dir,threshold=0.98,plot=False):
         markerline1.set_markerfacecolor('none')
         markerline2.set_markerfacecolor('none')
         plt.ylim(0,min(max(counts1),max(counts2)))
-        plt.xlabel('Hash Correlation coefficient')
-        plt.ylabel('Frequency * {}'.format(min(len(same_corrleation_coefficients),len(different_correlation_coefficients))))
+       # plt.xlabel('Hash Correlation coefficient')
+        #plt.ylabel('Frequency * {}'.format(min(len(same_corrleation_coefficients),len(different_correlation_coefficients))))
         plt.plot([threshold]*(15),range(0,15),'k',label='Threshold line')
-        plt.legend()
-        plt.title('Hash Robustness and discernibility performance')
+        #plt.legend()
+        #plt.title('Hash Robustness and discernibility performance')
+        if show:
+            plt.show()
+            sys.exit()
         plt.savefig(os.path.join(results_dir,'Distribution.jpg'))
 
     return same_corrleation_coefficients,different_correlation_coefficients,tpr_rate,fpr_rate
 def modelTest3(results_dir,threshold_start=0,threshold_end=0.9999,threshold_step=0.0001,write=False):
     tpr_value=[]
     fpr_value=[]
+    print('currently doint modelTest3')
     while threshold_start<=threshold_end:
         print('The threshold is set at {}'.format(threshold_start))
         _,_,_tpr_value,_fpr_value=modelTest2(results_dir,threshold_start)
@@ -1186,11 +1198,11 @@ if __name__=='__main__':
     modelTest2 is for plotting the distirbution of similarity and dissimilarity 
     modelTest3 is for plotting the distribution of tpr and fpr scores for different thresholds
     '''
-    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
-    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
-    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    # results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
-    # different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
+    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_indonesia' , '/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/operations_japan']
+    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/lena/test/indonesia','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/italy','/media/arnab/E0C2EDF9C2EDD3B6/lena/test/japan']
+    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    results_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/ModelTest'
+    different_dir='/media/arnab/E0C2EDF9C2EDD3B6/different/different_cv'
 
 
 
@@ -1201,8 +1213,8 @@ if __name__=='__main__':
     
     # discernibilityTest(results_dir,plot=True,threshold=0.98)
     # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
-    # rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir)
-    #modelTest2(results_dir,threshold=0.98,plot=True)
+    #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir,correction=False)
+    modelTest2(results_dir,threshold=0.98,plot=True,show=True)
     # modelTest3(results_dir,write=True)
     # writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
     # modelTest6(results_dir,0.98)
@@ -1211,12 +1223,12 @@ if __name__=='__main__':
 
 
 
-    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
-    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    localTest(original_dir,tampered_dir,model_dir,results_dir,image_name=['342.jpg'],custom_results_dir='/home/arnab/Downloads')   
-    #modelTest5(results_dir,0.98)
+    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+    # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
+    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    # localTest(original_dir,tampered_dir,model_dir,results_dir,image_name=['342.jpg'],custom_results_dir='/home/arnab/Downloads')   
+    # #modelTest5(results_dir,0.98)
 
     # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated small tampered']
     # customTest(original_dir,tampered_dir,model_dir,results_dir,threshold=0.98)    
