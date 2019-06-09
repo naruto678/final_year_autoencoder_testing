@@ -4,6 +4,7 @@
 '''
 from keras.models import load_model
 import os
+import time
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
@@ -137,24 +138,40 @@ class LocalizationTest:
         
 
     
-    def __call__(self,v=False,write=False,write_with_name=False,concat_image=True):
+    def __call__(self,v=False,write=False,write_with_name=False,concat_image=True,image_name=None,results_dir=None,map_threshold=None,org_threshold=None):
         '''
         This takes the original_image and the tampered image and saves the difference image
         '''
 
         _x=(os.path.join(self.tampered_dir,i) for i in os.listdir(self.tampered_dir))
         _y=(os.path.join(self.original_dir,i) for i in os.listdir(self.original_dir))
+        if image_name is not None:
+            if not isinstance(image_name,list):
+                image_name=[image_name]
+            _x=(os.path.join(self.tampered_dir,i) for i in image_name)
+            _y=(os.path.join(self.original_dir,i) for i in image_name)
+        
+            
+            if results_dir is None:
+                raise ValueError('Provide the value of the results_dir buddy')
+            self.results_dir=results_dir
+
         print('Found {} images corresponding to this'.format(len(os.listdir(self.original_dir))))
         correlation_coefficients=[]
         f1_scores=[]
-        map_threshold=10
-        org_threshold=30
+        if map_threshold is None:
+            map_threshold=0
+        if org_threshold is None:
+            org_threshold=30
         self.first_number=300
         self.second_number=1000
-        for i in tqdm(range(len(os.listdir(self.original_dir))),ascii=True,desc='Tampering Localization'):
-            original_image_name=next(_x)
+        
 
-            tampered_image_name=next(_y)
+        for i in tqdm(range(min(len(os.listdir(self.original_dir)),len(image_name))),ascii=True,desc='Tampering Localization'):
+
+            tampered_image_name=next(_x)
+
+            original_image_name=next(_y)
             original_image=self.image(original_image_name)
             tampered_image=self.image(tampered_image_name)
 
@@ -230,7 +247,9 @@ class LocalizationTest:
             original_image.close()
             tampered_image.close()
             del original_image_np,tampered_image_np;
+            time.sleep(0.01)
             gc.collect();
+
 
         if write_with_name:
             return correlation_coefficients,f1_scores,self.false_counter,os.listdir(self.original_dir)
@@ -966,8 +985,13 @@ def modelTest1(original_dir,tampered_dir,model_dir,results_dir):
                     for (a,b),c in visualize.dictionary.items():
                         f.write('{} {} {}'.format(a,b,c))
                     print('Saved the results in the file')
-def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None):
-    
+def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None,image_name=None,custom_results_dir=None):
+    if image_name:
+        if custom_results_dir is None:
+            raise ValueError('you did not pass the value of the results directory')
+
+        assert(os.path.exists(custom_results_dir))
+        
     print('Doing the localization test')
     for i in range(len(original_dir)):
         org_dir,tamp_dir,res_dir=original_dir[i],tampered_dir[i],results_dir[i]
@@ -978,7 +1002,7 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=Fa
 
             correlation,f1_scores,false_counter,image_names=test(concat_image=False)         
         else:
-            correlation,f1_scores,false_counter=test(concat_image=False)
+            correlation,f1_scores,false_counter=test(concat_image=False,image_name=image_name,results_dir='/home/arnab/Downloads',map_threshold=5,org_threshold=30)
         if write:
             with open(os.path.join(res_dir,'f1_scores'),'a') as fp:
                 for score in f1_scores:
@@ -1128,6 +1152,7 @@ def modelTest5(results_dir,threshold=0.98):
         assert(len(lines)>0)
 
     plt.scatter(range(len(lines)),lines,c='blue',label='Hash correlation')
+
     plt.plot(range(len(lines)),[threshold]*len(lines),label='Threshold_line')
     plt.xlabel('tampered pair number')
     plt.ylabel('Hash correlation')
@@ -1190,7 +1215,7 @@ if __name__=='__main__':
     tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
     results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
     model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    localTest(original_dir,tampered_dir,model_dir,results_dir,hash_corr_with_image_no=False)   
+    localTest(original_dir,tampered_dir,model_dir,results_dir,image_name=['342.jpg'],custom_results_dir='/home/arnab/Downloads')   
     #modelTest5(results_dir,0.98)
 
     # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated small tampered']
