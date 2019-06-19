@@ -139,13 +139,14 @@ class LocalizationTest:
         
 
     
-    def __call__(self,v=False,write=False,write_with_name=False,concat_image=True,image_name=None,results_dir=None,map_threshold=None,org_threshold=None):
+    def __call__(self,v=False,write=False,write_with_name=False,concat_image=True,image_name=None,results_dir=None,map_threshold=None,org_threshold=None,tamper_percent=False):
         '''
         This takes the original_image and the tampered image and saves the difference image
         '''
 
         _x=(os.path.join(self.tampered_dir,i) for i in os.listdir(self.tampered_dir))
         _y=(os.path.join(self.original_dir,i) for i in os.listdir(self.original_dir))
+        avg_tamper_percent=[]
         if image_name is not None:
             if not isinstance(image_name,list):
                 image_name=[image_name]
@@ -166,9 +167,12 @@ class LocalizationTest:
             org_threshold=30
         self.first_number=300
         self.second_number=1000
-        
+        if image_name:
+            min_length=len(image_name)
+        else:
+            min_length=sys.maxsize
 
-        for i in tqdm(range(min(len(os.listdir(self.original_dir)),len(image_name))),ascii=True,desc='Tampering Localization'):
+        for i in tqdm(range(min(len(os.listdir(self.original_dir)),min_length)),ascii=True,desc='Tampering Localization'):
 
             tampered_image_name=next(_x)
 
@@ -178,14 +182,19 @@ class LocalizationTest:
 
             original_image_np=self.image_np(original_image)
             tampered_image_np=self.image_np(tampered_image)
+            org_diff_map=original_image_np-tampered_image_np
+            org_diff_map[org_diff_map<=0]=-org_diff_map[org_diff_map<=0]
+            if tamper_percent:
+                nz=list(filter(None,org_diff_map.flatten()!=0))
+                avg_tamper_percent.append(len(nz)/len(org_diff_map.flatten()))
+                continue
+
             original_map=self.predict(original_image_np)[0,:,:,:]*255
             tampered_map=self.predict(tampered_image_np)[0,:,:,:]*255
             
             diff_map=original_map-tampered_map
             diff_map[diff_map<0]=-diff_map[diff_map<0]
-            org_diff_map=original_image_np-tampered_image_np
-            org_diff_map[org_diff_map<=0]=-org_diff_map[org_diff_map<=0]
-
+            
             
             logging.debug(original_image_name)
             logging.debug(original_image_np.shape)
@@ -254,7 +263,9 @@ class LocalizationTest:
 
         if write_with_name:
             return correlation_coefficients,f1_scores,self.false_counter,os.listdir(self.original_dir)
-            
+        if tamper_percent:
+            return sum(avg_tamper_percent)/(len(avg_tamper_percent)*3)
+
         return correlation_coefficients,f1_scores,self.false_counter
 
 
@@ -994,7 +1005,7 @@ def modelTest1(original_dir,tampered_dir,model_dir,results_dir):
                     for (a,b),c in visualize.dictionary.items():
                         f.write('{} {} {}'.format(a,b,c))
                     print('Saved the results in the file')
-def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None,image_name=None,custom_results_dir=None):
+def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=False,hash_corr_with_image_no=None,image_name=None,custom_results_dir=None,tamper_percent=False):
     if image_name:
         if custom_results_dir is None:
             raise ValueError('you did not pass the value of the results directory')
@@ -1009,7 +1020,10 @@ def localTest(oiginal_dir,tampered_dir,model_dir,results_dir,write=False,plot=Fa
         test=LocalizationTest(org_dir,tamp_dir,res_dir,model_dir,0.98)
         if hash_corr_with_image_no:
 
-            correlation,f1_scores,false_counter,image_names=test(concat_image=False)         
+            correlation,f1_scores,false_counter,image_names=test(concat_image=False)
+        if tamper_percent:
+            avg_tamper_percent=test(tamper_percent=True)
+            print(avg_tamper_percent)         
         else:
             correlation,f1_scores,false_counter=test(concat_image=False,image_name=image_name,results_dir='/home/arnab/Downloads',map_threshold=5,org_threshold=30)
         if write:
@@ -1226,7 +1240,7 @@ if __name__=='__main__':
     # discernibilityTest(results_dir,plot=True,threshold=0.98)
     # modelTest1(original_dir,tampered_dir,model_dir,results_dir)
     #rotationTest(original_dir,tampered_dir,model_dir,0.98,results_dir,correction=False)
-    modelTest2(results_dir,threshold=0.98,plot=True,show=True)
+    #modelTest2(results_dir,threshold=0.98,plot=True,show=True)
     # modelTest3(results_dir,write=True)
     # writeResults(original_dir,tampered_dir,model_dir,results_dir,different_dir)
     # modelTest6(results_dir,0.98)
@@ -1235,12 +1249,13 @@ if __name__=='__main__':
 
 
 
-    # original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
-    # tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
-    # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
-    # model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
-    # localTest(original_dir,tampered_dir,model_dir,results_dir,image_name=['342.jpg'],custom_results_dir='/home/arnab/Downloads')   
-    # #modelTest5(results_dir,0.98)
+    original_dir=[ '/media/arnab/E0C2EDF9C2EDD3B6/large tampered/original_cv' , '/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/original_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/original_cv']
+    tampered_dir=['/media/arnab/E0C2EDF9C2EDD3B6/large tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/medium tampered/tampered_cv','/media/arnab/E0C2EDF9C2EDD3B6/small tampered/tampered_cv']
+    results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/small tampered']
+    model_dir='/media/arnab/E0C2EDF9C2EDD3B6/final_year/8_bilinear_v6_128.h5'
+    #localTest(original_dir,tampered_dir,model_dir,results_dir,image_name=['342.jpg'],custom_results_dir='/home/arnab/Downloads')   
+    localTest(original_dir,tampered_dir,model_dir,results_dir,tamper_percent=True)
+    #modelTest5(results_dir,0.98)
 
     # results_dir=['/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated large tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated medium tampered','/media/arnab/E0C2EDF9C2EDD3B6/final_year/Results/Tampered/rotated small tampered']
     # customTest(original_dir,tampered_dir,model_dir,results_dir,threshold=0.98)    
