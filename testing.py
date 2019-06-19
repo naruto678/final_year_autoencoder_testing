@@ -658,13 +658,14 @@ class RotationTest(ModelTest):
         x=sorted(self.detect_dict.keys())
         y=[self.detect_dict[i] for i in x]
         
-
+        plt.rcParams['font.weight']='bold'
+        plt.rcParams['axes.labelweight']='bold'
 
         plt.bar(x,y,align='center')
         plt.locator_params(axis='x', nbins=20)
-        plt.xlabel('degree of rotation')
-        plt.ylabel('true positive rate')
-        plt.title('tpr vs degree')
+        plt.xlabel('Degrees of rotation')
+        plt.ylabel('True positive rate')
+        #plt.title('tpr vs degree')
         plt.savefig('tpr_vs_degree.png')
         print(str(self.detect_dict))
 class DiscernibiltyTest:
@@ -1039,7 +1040,7 @@ def rotationTest(original_dir,tampered_dir,mdoel_dir,threshold,results_dir,corre
 
     print('Currently doing rotation test')
     rotation=RotationTest(original_dir,tampered_dir,model_dir,threshold,results_dir)
-    d1=rotation(correction=correction,n_samples=200)
+    d1=rotation(correction=correction,n_samples=100)
     with open(os.path.join(results_dir,'rotation.txt'),'a') as fp:
         fp.write(str(d1))
 
@@ -1057,6 +1058,8 @@ def discernibilityTest(results_dir,threshold=0.98,plot=False):
         logging.debug('the total number of correlation coefficients is {}'.format(len(lines)))
 
         if plot:
+            plt.rcParams['font.weight']='bold'
+            plt.rcParams['axes.labelweight']='bold'
             plt.scatter(range(len(lines)),lines,c='red',label='Hash Correlation of the point')
             
             plt.plot(range(len(lines)),[threshold]*(len(lines)),color='k',label='Threshold line')
@@ -1084,33 +1087,42 @@ def modelTest2(results_dir,threshold=0.98,plot=False,show=True):
     tpr_rate=tpr_counter/len(same_corrleation_coefficients)
         
     different_correlation_coefficients,fpr_rate=discernibilityTest(results_dir,threshold)
+    with open(os.path.join(results_dir,'tampered_correlation')) as fp:
+        tampered_correlation_coefficients=[float(line) for line in fp.readlines()]
     logging.debug(len(list(filter(lambda x : x> 0.98 , different_correlation_coefficients)))/len(different_correlation_coefficients))
     logging.debug(len(list(filter(lambda x:x<0.98, same_corrleation_coefficients)))/len(same_corrleation_coefficients))
     if plot:
         same_corrleation_coefficients=np.array(same_corrleation_coefficients).flatten()
         counts1,bins1=np.histogram(same_corrleation_coefficients,bins=100)
         counts2,bins2=np.histogram(np.array(different_correlation_coefficients).flatten(),bins=100)
+        counts3,bins3=np.histogram(np.array(tampered_correlation_coefficients).flatten(),bins=100)
         counts1=np.array(counts1)/sum(counts1)
         counts2=np.array(counts2)/sum(counts2)
-
+        counts3=np.array(counts3)/sum(counts3)
+            
         
-        
-
         logging.debug(counts1)
         logging.debug(counts2)
-        
+        plt.rcParams['font.weight']='bold'
+        plt.rcParams['axes.labelweight']='bold'
         markerline1,stemline1,baseline1=plt.stem(bins1[:-1],counts1,label='semantically similar pairs',markerfmt='D',use_line_collection=True)
         markerline2,stemline2,baseline2=plt.stem(bins2[:-1],counts2,label='dissimilar image pairs',use_line_collection=True)
+        markerline3,stemline3,baseline3=plt.stem(bins3[:-1],counts3,label='tampered image pairs',use_line_collection=True)
         plt.setp(stemline1,linestyle='-',color='blue')
         plt.setp(stemline2,color='green')
-        plt.setp(baseline1,visible=False)
-        plt.setp(baseline2,visible=False)
+        plt.setp(baseline1,visible=True)
+        plt.setp(baseline2,visible=True)
+        plt.setp(baseline3,visible=True)
+        plt.setp(stemline3,color='red')
+        plt.setp(markerline3,color='red')
+        plt.setp(markerline2,color='green')
         markerline1.set_markerfacecolor('none')
         markerline2.set_markerfacecolor('none')
-        plt.ylim(0,min(max(counts1),max(counts2)))
-       # plt.xlabel('Hash Correlation coefficient')
-        #plt.ylabel('Frequency * {}'.format(min(len(same_corrleation_coefficients),len(different_correlation_coefficients))))
-        plt.plot([threshold]*(15),range(0,15),'k',label='Threshold line')
+        plt.ylim(0,min(max(counts1),max(counts2),max(counts3)))
+        plt.xlabel('Hash Correlation coefficient')
+        plt.ylabel('Frequency * {}'.format(min(len(same_corrleation_coefficients),len(different_correlation_coefficients),len(tampered_correlation_coefficients))))
+        
+        plt.plot([threshold]*(15),range(0,15),'y',label='Threshold line')
         #plt.legend()
         #plt.title('Hash Robustness and discernibility performance')
         if show:
